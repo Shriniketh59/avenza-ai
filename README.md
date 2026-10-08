@@ -73,7 +73,7 @@ The first run takes a few minutes (≈1 GB of packages). The reranker, question-
 - **Flow diagrams**: rendered in the chat from a sketch, a document or a description; copy the code or download an SVG.
 - **Live data**: web search, a recent-news index (refreshed every 30 minutes) and your own documents, searched in parallel.
 - **Memory**: tell it "my name is …" or "I work at …" and it remembers (can be turned off).
-- **Voice mode**: hands-free conversation with local speech-to-text and text-to-speech; spoken answers are quoted from sources by local models (no LLM).
+- **Voice mode**: hands-free conversation with local speech-to-text and text-to-speech. Short factual answers are quoted straight from sources by local models; explanations, tasks and anything the sources miss are answered briefly by the LLM, so every question gets an answer.
 
 ---
 
@@ -121,10 +121,12 @@ flowchart TD
     end
     EMB --> DOCS
 
-    subgraph Voice["Voice path (local, no LLM)"]
+    subgraph Voice["Voice path"]
         V1["Whisper<br/>speech-to-text"] --> V2["Same retrieval + reranking"]
         V2 --> V3["Extractive QA reader<br/>RoBERTa SQuAD2 · ONNX"]
+        V3 -->|"no short answer"| V5["LLM, short spoken reply"]
         V3 --> V4["Piper<br/>text-to-speech"]
+        V5 --> V4
     end
     UI -. "voice mode" .-> V1
 ```
@@ -172,7 +174,7 @@ The LLM is used to **write** answers quickly; **facts come from sources**.
 - If the sources do not answer the question, the assistant says so instead of guessing.
 - A post-check flags any number in the answer that is not in the sources. Calculations must be shown, like `40,000 - 35,000 = 5,000`.
 - Web pages are cleaned before use: sentence splitting that understands abbreviations (`a.m.`, `U.S.`, `Inc.`), tables turned into labelled lines, encoding fixed, page dates and headings removed.
-- Voice answers use no LLM at all: a local extractive model quotes the exact answer span and names its source.
+- Voice answers quote the exact answer span from a source when one exists; otherwise the LLM answers briefly from whatever sources were found.
 
 ---
 
@@ -305,6 +307,6 @@ Errors are non-2xx responses with `{"error": "message"}`.
 ## Privacy
 
 - Runs on your machine: the web app, backend, database, document index, embeddings, reranker, speech-to-text and text-to-speech.
-- Sent to the LLM API: your question and the source passages used to answer it (and attached images). Voice mode sends nothing to the LLM.
+- Sent to the LLM API: your question and the source passages used to answer it (and attached images). In voice mode, only questions the local models cannot answer by quoting are sent.
 - Sent to the search engine: the search query, when web search is on.
 - `.env.local`, the database and your documents (`backend/instance/`) are git-ignored and never committed.

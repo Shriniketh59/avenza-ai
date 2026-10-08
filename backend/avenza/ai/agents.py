@@ -205,6 +205,19 @@ Mermaid rules (the diagram must render without errors):
 Do not invent steps; if the flow has a gap, show it as a node labelled "?" and mention it.""",
 )
 
+VOICE = Agent(
+    "voice",
+    "Voice",
+    """Role: voice assistant. Your reply is read aloud.
+- Answer in 2 to 5 short, natural spoken sentences. Direct answer first, then a brief explanation.
+- Plain text only: no Markdown, lists, tables, code, emoji or URLs. Write numbers and units so they sound natural.
+- For jokes, stories or casual chat, just respond naturally and briefly.""",
+    mode="fast",
+    reasoning="low",
+    grounding="""Answer from these sources when they cover the question, citing them like [1].
+If they do not, answer from well-established general knowledge, but do not state specific recent figures, prices, dates or events that the sources do not show; say you could not verify those.""",
+)
+
 AGENTS = {a.id: a for a in (GENERAL, CODE, DEBUGGING, MATH, REASONING, PROBLEM, FINANCE, RESEARCH, FILES, ANALYST, DIAGRAM, IMAGE)}
 # One line per agent for the understanding step to choose from.
 CATALOG = {

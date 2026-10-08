@@ -177,7 +177,15 @@ def chat():
                 # Voice answers come from the NLP reader over the sources, never from the LLM.
                 answer = voice_answer.reply(question, query, analysis, items, memories, memorable=memorable,
                                             use_memory=use_memory, web_enabled=use_web)
-                yield _event({"type": "token", "value": answer})
+                if answer is not None:
+                    yield _event({"type": "token", "value": answer})
+                else:
+                    # Quoting could not answer it (nothing found, or a task/creative request): the LLM answers
+                    # briefly, from the sources when there are any, so every spoken question gets an answer.
+                    voice_agent = agents.VOICE
+                    messages = rag.build_messages(history, items, memories, analysis, pending, False, voice_agent)
+                    for chunk in llm.stream_chat(messages, voice_agent.mode, voice_agent.reasoning):
+                        yield _event({"type": "token", "value": chunk})
             else:
                 searched = analysis.needs_retrieval and (web_future is not None or bool(docs or news))
                 messages = rag.build_messages(history, items, memories, analysis, pending, searched, agent, understood, images)

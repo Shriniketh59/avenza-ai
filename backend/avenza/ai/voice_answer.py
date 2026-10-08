@@ -18,13 +18,17 @@ _THANKS = re.compile(r"^\s*(thanks|thank you|thx|cheers|great|awesome|perfect|ni
 _IDENTITY = re.compile(r"\b(who|what) are you\b|\byour name\b|\bwhat can you do\b|\bintroduce yourself\b", re.I)
 _TIME = re.compile(r"\bwhat('s| is)? (the )?time\b|\bcurrent time\b|\btime is it\b", re.I)
 _DATE = re.compile(r"\b(what('s| is)? (the |today'?s )?(date|day)|today'?s date|current date|what day is it)\b", re.I)
+_CREATIVE = re.compile(r"\b(joke|story|poem|song|riddle|rap|limerick|haiku|quote|motivat\w*|advice|suggest\w*|recommend\w*|ideas?|"
+                       r"how are you|what do you think|your opinion|imagine|pretend)\b", re.I)
 _ABOUT_USER = re.compile(r"\b(my|me|i|mine)\b", re.I)
 # Questions that want an explanation, not just a fact: answered with more supporting sentences.
 _EXPLAIN = re.compile(r"^\s*(please )?(explain|describe|tell me (more )?about|define|what (is|are|does|do)\b|what's|how|why)\b", re.I)
 
 
 def reply(question: str, query: str, analysis, items: list[dict], memories: list[dict], *,
-          memorable: bool, use_memory: bool, web_enabled: bool) -> str:
+          memorable: bool, use_memory: bool, web_enabled: bool) -> str | None:
+    """A spoken answer quoted from the sources, or None when quoting cannot answer it well
+    (no sources found, a task or creative request): the caller then has the LLM answer instead."""
     q = question.strip()
     if memorable:
         return "Got it. I'll remember that." if use_memory else "Noted. Memory is turned off, so I won't keep it after this chat."
@@ -40,21 +44,21 @@ def reply(question: str, query: str, analysis, items: list[dict], memories: list
         return f"It's {now:%I:%M %p}".replace(" 0", " ") + "."
     if _DATE.search(q):
         return f"Today is {now:%A, %d %B %Y}."
-    if CODE_OR_TASK.search(q) and not items:
-        return "Writing and coding tasks work best in the text chat. By voice, ask me a question and I'll find the answer in your sources."
+    if CODE_OR_TASK.search(q) or _CREATIVE.search(q):
+        return None  # tasks and creative requests are written, not quoted
 
     passages = _passages(q, items, memories)
     if not passages:
         if analysis.intent == "personal":
             return ("I don't have that saved yet. Tell me, for example, “my name is …” or “I work at …”, "
                     "and I'll remember it." if use_memory else "Memory is turned off, so I don't know that about you.")
-        where = "your documents, saved news or the web" if web_enabled else "your documents or saved news"
-        tip = "" if web_enabled else " Web search is off. Say turn on web search and ask again."
-        return f"I couldn't find anything about that in {where}.{tip}"
+        return None
 
     # Follow-ups ("and in 2025?") only make sense together with the previous question.
     ask = q if len(q.split()) >= 4 or query == q else query
     explain = bool(_EXPLAIN.search(q))
+    if explain and not _ABOUT_USER.search(q):
+        return None  # explanations are written by the LLM from these sources; quoting suits short facts
     answer = _extract(ask, passages, prefer_news=analysis.is_recent, explain=explain)
     if answer:
         return answer
@@ -141,7 +145,7 @@ def _extract(question: str, passages: list[dict], prefer_news: bool = False, exp
     return f"{' '.join(parts)} {_source_phrase(used)}"
 
 
-def _summarise(question: str, passages: list[dict], explain: bool = False) -> str:
+def _summarise(question: str, passages: list[dict], explain: bool = False) -> str | None:
     """No short answer exists: read out the most relevant sentences, or headlines for news questions."""
     news = [p for p in passages if p["kind"] == "news" and p.get("title")]
     if news and passages[0]["kind"] == "news":
@@ -149,7 +153,7 @@ def _summarise(question: str, passages: list[dict], explain: bool = False) -> st
         return f"Here are the latest headlines. {heads}."
     picked = _supporting(question, passages[:3], [], 2, current_app.config["RERANK_MIN_SCORE"])
     if not picked:
-        return "I found related sources but no clear answer in them. Try asking more specifically."
+        return None
     if explain:
         first, src = picked[0]
         picked[1:1] = [(s, src) for s in _following(src, first, 2, [s for s, _ in picked])]
