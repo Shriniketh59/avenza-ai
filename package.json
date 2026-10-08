@@ -9,7 +9,9 @@
     "lint": "eslint",
     "dev:web": "next dev",
     "dev:api": "backend/.venv/bin/python backend/run.py",
-    "setup:api": "python3 -m venv backend/.venv && backend/.venv/bin/pip install -r backend/requirements.txt"
+    "setup:api": "python3 -m venv backend/.venv && backend/.venv/bin/pip install -r backend/requirements.txt",
+    "setup": "./start.sh --setup-only",
+    "start:all": "./start.sh"
   },
   "dependencies": {
     "@radix-ui/react-slot": "^1.3.3",

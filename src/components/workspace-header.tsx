@@ -40,7 +40,8 @@ export function WorkspaceHeader({ title, children }: { title?: ReactNode; childr
       >
         <Menu className="size-5" />
       </button>
-      <div className="min-w-0 flex-1 truncate text-sm font-medium">{title}</div>
+      {/* Text titles truncate; component titles (the agent picker) must not clip their dropdown. */}
+      <div className={cn("min-w-0 flex-1 text-sm font-medium", typeof title === "string" && "truncate")}>{title}</div>
       {children}
     </header>
   );

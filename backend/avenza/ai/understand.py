@@ -18,7 +18,7 @@ Today is {today}.
 - Fix typos and grammar, expand abbreviations and shorthand (e.g. "qn" = question, "rte" = rate, "pls" = please).
 - Resolve "it", "that", "this", "same" and follow-ups using the earlier turns.
 - Keep the user's meaning, scope and numbers exactly. Never answer the question and never add facts.
-- "search": a concise web search query for the facts needed, or "" if none are needed (maths, coding, writing, chit-chat, questions about attached files or images). Never add a year unless the user gave one.
+- "search": a concise web search query covering every part of the question that needs facts, or "" if none are needed (maths, coding, writing, chit-chat, questions about attached files or images). Never add a year unless the user gave one.
 - "goal": in a few words, what the user ultimately wants (e.g. "decide whether to prepay loan").
 - "level": "beginner", "intermediate" or "expert", judged from how the user writes and asks.
 - "agent": the best fit from: {catalog}.

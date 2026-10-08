@@ -130,7 +130,7 @@ export function MessageComposer({ generating, disabled, speechLanguage, autoSend
       }}
       className="mx-auto w-full max-w-3xl"
     >
-      {/* Gemini-style pill: hairline border becomes an animated AVENZA gradient on focus. */}
+      {/* Pill composer: hairline border becomes an animated AVENZA gradient on focus. */}
       <div className={cn("avz-composer shadow-[0_10px_40px_-18px_rgba(0,0,0,0.6)]", disabled && "opacity-60")}>
         <div className="avz-composer-inner bg-surface-2">
           {files.length > 0 && (

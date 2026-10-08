@@ -57,7 +57,7 @@ def _open_stream(p: dict, body: dict) -> requests.Response:
     if res.status_code == 400 and "thinking level" in detail.lower() and "reasoning_effort" in body:
         raise _Retry("unsupported reasoning level")
     if res.status_code in (401, 403) or "API key" in detail:
-        raise LLMUnavailable(f"{name} rejected the API key. Check {name.upper()}_API_KEY in .env.local.")
+        raise LLMUnavailable(f"{name} rejected the API key. Check LLM_API_KEY in .env.local.")
     if res.status_code == 402:
         raise LLMUnavailable(f"Your {name} account has no balance left.")
     if res.status_code == 404:
@@ -75,7 +75,7 @@ def stream_chat(messages: list[dict], mode: str | None = None, reasoning: str | 
     p = provider()
     name = p["name"]
     if not p["key"]:
-        raise LLMUnavailable(f"{name} is not configured. Add {name.upper()}_API_KEY to .env.local and restart the backend.")
+        raise LLMUnavailable("The LLM API is not configured. Add LLM_API_KEY to .env.local and restart the app.")
     mode = resolve_mode(mode)
     extra = dict(p["extra"][mode])
     if reasoning and "reasoning_effort" in extra:

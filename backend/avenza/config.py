@@ -17,10 +17,14 @@ class Config:
     APP_URL = os.environ.get("APP_URL", "http://localhost:3000").rstrip("/")
 
     # --- Text generation: Gemini or DeepSeek API (both OpenAI-compatible) ---
-    GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
-    DEEPSEEK_API_KEY = os.environ.get("DEEPSEEK_API_KEY", "")
-    # Whichever key is set; Gemini wins when both are.
-    LLM_PROVIDER = os.environ.get("LLM_PROVIDER") or ("deepseek" if DEEPSEEK_API_KEY and not GEMINI_API_KEY else "gemini")
+    # LLM_API_KEY is the provider-neutral setting: it is used for the selected provider preset
+    # (LLM_PROVIDER, default "gemini"). Provider-specific variables still work and take precedence.
+    _LLM_KEY = os.environ.get("LLM_API_KEY", "")
+    _PRESET = os.environ.get("LLM_PROVIDER", "")
+    GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY") or (_LLM_KEY if _PRESET != "deepseek" else "")
+    DEEPSEEK_API_KEY = os.environ.get("DEEPSEEK_API_KEY") or (_LLM_KEY if _PRESET == "deepseek" else "")
+    # Whichever key is set; the default preset wins when both are.
+    LLM_PROVIDER = _PRESET or ("deepseek" if DEEPSEEK_API_KEY and not GEMINI_API_KEY else "gemini")
     LLM_PROVIDERS = {
         "gemini": {
             "name": "Gemini",

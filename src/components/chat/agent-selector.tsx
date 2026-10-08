@@ -8,8 +8,8 @@ import { usePreferences } from "@/hooks/use-preferences";
 import { cn } from "@/lib/utils";
 
 const MODES = [
-  { id: "fast", name: "Fast", hint: "Instant answers · Gemini 3.5 Flash-Lite", icon: Zap },
-  { id: "accurate", name: "Accurate", hint: "More reasoning · Gemini 3.8 Flash", icon: Gauge },
+  { id: "fast", name: "Fast", hint: "Instant answers · lightweight model", icon: Zap },
+  { id: "accurate", name: "Accurate", hint: "More reasoning · larger model", icon: Gauge },
 ] as const;
 
 function Option({
@@ -47,7 +47,7 @@ function Option({
 
 /**
  * Agent and speed picker. Agents are specialist prompts and search rules on the backend;
- * speed picks the Gemini model (Code and Reasoning always use the accurate one).
+ * speed picks the model size (Code, Debugging, Math and Reasoning always use the larger one).
  */
 export function AgentSelector() {
   const [open, setOpen] = useState(false);

@@ -19,7 +19,7 @@ SYSTEM_PROMPT = """You are AVENZA AI, a precise assistant for finance and techno
 - When the user shares personal details or asks you to remember something, confirm briefly in one sentence."""
 
 GROUNDING = """Answer the question above using ONLY these sources. Rules:
-- Every fact, figure, name and date must come from the sources, with the source number right after it, like [1]. Copy figures exactly as written; do not round, convert or recompute them unless asked. Any number you calculate (differences, totals, growth) must be shown with its arithmetic as inline code, like `40,000 - 35,000 = 5,000`.
+- Every fact, figure, name and date must come from the sources, with the source number right after it, like [1]. Copy figures exactly as written; do not round, convert or recompute them unless asked. Any number you calculate yourself (a difference, total or growth rate) must be shown with its working as one inline-code expression containing `=`, like `40,000 - 35,000 = 5,000`. Write all other figures as plain text, never in code formatting.
 - Start with the direct, precise answer in one or two sentences. Then explain it from the sources: why or how it is so, the key figures, dates and context they give, each cited. Use short paragraphs or bullets. Explain only what the sources support, and keep it focused on what was asked.
 - If sources disagree, prefer the most recent one and mention the difference.
 - If the sources only partly answer, answer that part and say what is missing.
