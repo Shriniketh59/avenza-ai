@@ -213,7 +213,7 @@ VOICE = Agent(
 - Plain text only: no Markdown, lists, tables, code, emoji or URLs. Write numbers and units so they sound natural.
 - For jokes, stories or casual chat, just respond naturally and briefly.""",
     mode="fast",
-    reasoning="low",
+    reasoning="minimal",  # fastest first word; accuracy comes from the sources
     grounding="""Answer from these sources when they cover the question, citing them like [1].
 If they do not, answer from well-established general knowledge, but do not state specific recent figures, prices, dates or events that the sources do not show; say you could not verify those.""",
 )

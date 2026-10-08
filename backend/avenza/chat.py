@@ -139,7 +139,7 @@ def chat():
             ranked_web = []
             if web_future is not None:
                 try:
-                    web = web_future.result(timeout=15)
+                    web = web_future.result(timeout=6 if voice else 15)  # a spoken reply cannot wait long
                 except Exception:
                     web = []
                 ranked_web = rag.rank(query, web=web)
@@ -175,13 +175,12 @@ def chat():
 
             if voice:
                 # Voice answers come from the NLP reader over the sources, never from the LLM.
-                answer = voice_answer.reply(question, query, analysis, items, memories, memorable=memorable,
-                                            use_memory=use_memory, web_enabled=use_web)
+                answer = voice_answer.instant(question, memorable=memorable, use_memory=use_memory)
                 if answer is not None:
                     yield _event({"type": "token", "value": answer})
                 else:
-                    # Quoting could not answer it (nothing found, or a task/creative request): the LLM answers
-                    # briefly, from the sources when there are any, so every spoken question gets an answer.
+                    # Every other spoken question is answered by the fast LLM in a short spoken reply,
+                    # grounded on the sources retrieved for it (quoting sentences gave stilted, often wrong answers).
                     voice_agent = agents.VOICE
                     messages = rag.build_messages(history, items, memories, analysis, pending, False, voice_agent)
                     for chunk in llm.stream_chat(messages, voice_agent.mode, voice_agent.reasoning):

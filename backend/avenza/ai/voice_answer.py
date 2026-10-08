@@ -25,6 +25,23 @@ _ABOUT_USER = re.compile(r"\b(my|me|i|mine)\b", re.I)
 _EXPLAIN = re.compile(r"^\s*(please )?(explain|describe|tell me (more )?about|define|what (is|are|does|do)\b|what's|how|why)\b", re.I)
 
 
+def instant(question: str, *, memorable: bool, use_memory: bool) -> str | None:
+    """Replies that need no model at all (greetings, time, date, "remember this"), or None."""
+    q = question.strip()
+    if memorable:
+        return "Got it. I'll remember that." if use_memory else "Noted. Memory is turned off, so I won't keep it after this chat."
+    if _THANKS.match(q):
+        return "You're welcome."
+    if GREETINGS.match(q):
+        return "Hello! What would you like to know?"
+    now = datetime.now().astimezone()
+    if _TIME.search(q):
+        return f"It's {now:%I:%M %p}".replace(" 0", " ") + "."
+    if _DATE.search(q):
+        return f"Today is {now:%A, %d %B %Y}."
+    return None
+
+
 def reply(question: str, query: str, analysis, items: list[dict], memories: list[dict], *,
           memorable: bool, use_memory: bool, web_enabled: bool) -> str | None:
     """A spoken answer quoted from the sources, or None when quoting cannot answer it well
