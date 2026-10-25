@@ -205,6 +205,19 @@ Mermaid rules (the diagram must render without errors):
 Do not invent steps; if the flow has a gap, show it as a node labelled "?" and mention it.""",
 )
 
+# Greetings and casual chat: no search, no sources, no thinking, the fast model.
+CHAT = Agent(
+    "chat",
+    "Chat",
+    """Role: friendly assistant in a casual exchange.
+- Reply naturally and warmly in one to three short sentences, like a helpful person would.
+- For a greeting, greet back and offer help with finance, technology, code or the user's documents. No lists or headings.""",
+    mode="fast",
+    reasoning="minimal",
+    web=False,
+    factcheck=False,
+)
+
 VOICE = Agent(
     "voice",
     "Voice",

@@ -2,7 +2,8 @@
 
 Page, slide and sheet markers ("[Page 3]", "[Slide 2]", "[Sheet Q1]") are kept so answers can say
 where something came from; headings stay as Markdown headings and table rows become labelled
-lines. Scanned PDFs (no text layer) are transcribed page by page by the vision model.
+lines. Scanned PDFs (no text layer) are transcribed by the API vision model (local OCR with the local
+model); image files uploaded as documents are read with local OCR (ocr.py).
 """
 import base64
 import csv
@@ -16,7 +17,8 @@ from flask import current_app
 
 TEXT = {".txt", ".md", ".log", ".xml", ".yaml", ".yml", ".ini", ".toml", ".sql", ".py", ".js", ".ts", ".tsx", ".jsx",
         ".java", ".c", ".cpp", ".h", ".cs", ".go", ".rs", ".rb", ".php", ".sh", ".css", ".kt", ".swift", ".r"}
-SUPPORTED = {".pdf", ".docx", ".pptx", ".xlsx", ".csv", ".tsv", ".json", ".html", ".htm"} | TEXT
+IMAGES = {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tif", ".tiff"}
+SUPPORTED = {".pdf", ".docx", ".pptx", ".xlsx", ".csv", ".tsv", ".json", ".html", ".htm"} | TEXT | IMAGES
 CODE_LANG = {".py": "python", ".js": "javascript", ".ts": "typescript", ".tsx": "tsx", ".jsx": "jsx", ".java": "java",
              ".c": "c", ".cpp": "cpp", ".h": "c", ".cs": "csharp", ".go": "go", ".rs": "rust", ".rb": "ruby",
              ".php": "php", ".sh": "bash", ".css": "css", ".kt": "kotlin", ".swift": "swift", ".r": "r", ".sql": "sql"}
@@ -33,7 +35,7 @@ def extract_text(filename: str, data: bytes) -> str:
     ext = Path(filename).suffix.lower()
     if ext not in SUPPORTED:
         raise UnsupportedFile(
-            f"{ext or 'This file type'} is not supported. Use PDF, Word, PowerPoint, Excel, CSV, HTML, JSON, text or code files."
+            f"{ext or 'This file type'} is not supported. Use PDF, Word, PowerPoint, Excel, CSV, HTML, JSON, images, text or code files."
         )
     if ext in CODE_LANG:
         # Code stays one fenced block per file so the model sees it as code, with line structure intact.
@@ -50,6 +52,10 @@ def extract_text(filename: str, data: bytes) -> str:
         return trafilatura.extract(_decode(data), include_tables=True, include_formatting=True) or ""
     if ext == ".pdf":
         return _pdf(data)
+    if ext in IMAGES:
+        from . import ocr
+
+        return ocr.read_image(data)
     if ext == ".docx":
         return _docx(data)
     if ext == ".pptx":
@@ -95,7 +101,7 @@ def _pdf(data: bytes) -> str:
     reader = PdfReader(io.BytesIO(data))
     pages = [(p.extract_text() or "").strip() for p in reader.pages]
     scanned = [i for i, t in enumerate(pages) if len(t) < _MIN_PAGE_TEXT]
-    # Mostly image pages: transcribe them with the vision model (capped; the rest keep their text layer).
+    # Mostly image pages: read them with OCR (capped; the rest keep their text layer).
     if scanned and len(scanned) >= max(1, len(pages) // 3):
         for i, text in _ocr_pages(data, scanned[:_OCR_MAX_PAGES]).items():
             pages[i] = text
@@ -108,21 +114,21 @@ If the page is blank, reply with nothing."""
 
 
 def _ocr_pages(data: bytes, indexes: list[int]) -> dict[int, str]:
-    """Text of scanned PDF pages via the vision model, several pages in parallel. Empty on failure."""
+    """Text of scanned PDF pages, read by the API vision model. Failed pages stay empty."""
+    import pypdfium2 as pdfium
+
     from . import llm
 
-    try:
-        import pypdfium2 as pdfium
-    except ImportError:
-        return {}
     pdf = pdfium.PdfDocument(data)
+    try:
+        pages = {i: pdf[i].render(scale=2.0).to_pil() for i in indexes}
+    finally:
+        pdf.close()
     images = {}
-    for i in indexes:
-        bitmap = pdf[i].render(scale=1.6).to_pil()
+    for i, image in pages.items():
         buf = io.BytesIO()
-        bitmap.convert("RGB").save(buf, "JPEG", quality=80)
+        image.convert("RGB").save(buf, "JPEG", quality=80)
         images[i] = "data:image/jpeg;base64," + base64.b64encode(buf.getvalue()).decode()
-    pdf.close()
     app = current_app._get_current_object()
 
     def one(i: int) -> tuple[int, str]:

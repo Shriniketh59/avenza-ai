@@ -33,7 +33,7 @@ Every answer is built from real sources (your documents, saved memory, recent ne
 
 ## Quick start
 
-**You need:** Linux or macOS (Windows: use WSL), [Node.js 20+](https://nodejs.org), [Python 3.11+](https://www.python.org), [Ollama](https://ollama.com) and an API key for an OpenAI-compatible LLM API.
+**You need:** Linux or macOS (Windows: use WSL), [Node.js 20+](https://nodejs.org), [Python 3.11+](https://www.python.org) and a Gemini API key (chat and embeddings).
 
 ```bash
 git clone https://github.com/Shriniketh59/avenza-ai.git
@@ -45,11 +45,11 @@ Open **http://localhost:3000**, create an account, and start asking.
 
 `start.sh` does everything and is safe to run every time; each step is skipped once done:
 
-1. checks Node, Python and Ollama,
+1. checks Node and Python,
 2. creates `.env.local`, generates `AUTH_SECRET` and asks for your `LLM_API_KEY`,
 3. creates the Python virtualenv and installs the backend packages,
 4. installs the npm packages,
-5. starts Ollama if needed, pulls the `nomic-embed-text` embedding model and downloads a speech voice,
+5. downloads a speech voice,
 6. starts the web app (port 3000) and the backend (port 5000, local only) together.
 
 The first run takes a few minutes (≈1 GB of packages). The reranker, question-answering and speech-to-text models (~300 MB) download automatically the first time the backend starts. Press **Ctrl+C** to stop everything.
@@ -117,7 +117,7 @@ flowchart TD
     subgraph Ingest["Document ingestion"]
         F["Upload: PDF · DOCX · PPTX · XLSX · CSV · code"] --> X["Extract text<br/>vision OCR for scans"]
         X --> CH["Chunk by sentence<br/>page markers"]
-        CH --> EMB["Embed locally<br/>Ollama nomic-embed-text"]
+        CH --> EMB["Embed<br/>Gemini gemini-embedding-2"]
     end
     EMB --> DOCS
 
@@ -204,11 +204,14 @@ Optional tuning (defaults in [`backend/avenza/config.py`](backend/avenza/config.
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
+| `USAGE_SESSION_TOKENS` / `USAGE_SESSION_HOURS` | `300000` / `5` | per-account session limit (weighted tokens) |
+| `USAGE_WEEKLY_TOKENS` | `2000000` | per-account weekly limit, resets Monday 00:00 UTC |
+| `PLUS_TOKEN_WEIGHT` | `3` | usage charged per Avenza Plus token (Flash = 1) |
 | `UNDERSTAND_ENABLED` | `1` | question-understanding step before search |
 | `WEB_SEARCH_RESULTS` | `5` | web results per question |
 | `MAX_CONTEXT_PASSAGES` | `8` | passages given to the model |
 | `NEWS_ENABLED` / `NEWS_REFRESH_MINUTES` | `1` / `30` | background news index |
-| `EMBED_MODEL` | `nomic-embed-text` | Ollama embedding model (changing it means re-uploading documents) |
+| `EMBED_MODEL` | `gemini-embedding-2` | Gemini embedding model (changing it means re-uploading documents) |
 | `WHISPER_MODEL` | `base` | speech-to-text size: `tiny`, `base`, `small` |
 | `DEFAULT_VOICE` | `en_US-lessac-medium` | Piper voice |
 
@@ -227,11 +230,7 @@ python3 -m venv backend/.venv
 backend/.venv/bin/pip install -r backend/requirements.txt
 backend/.venv/bin/python -m piper.download_voices en_US-lessac-medium --data-dir backend/instance/voices
 
-# 3. embeddings
-ollama serve &                      # skip if Ollama already runs as a service
-ollama pull nomic-embed-text
-
-# 4. frontend + start both servers
+# 3. frontend + start both servers
 npm ci
 npm run dev                         # http://localhost:3000
 ```
@@ -246,7 +245,7 @@ npm run dev                         # http://localhost:3000
 | "rejected the API key" | the key is wrong or expired; replace it in `.env.local` |
 | "limit reached" / "overloaded" | the LLM provider is rate-limiting; wait a minute |
 | Backend shows offline | the backend is still starting (first start downloads models) or port 5000 is taken |
-| "Cannot reach Ollama for embeddings" | run `ollama serve`, then `ollama pull nomic-embed-text` |
+| "Embeddings need GEMINI_API_KEY" | add `GEMINI_API_KEY` to `.env.local`, then restart |
 | `port 3000 is already in use` | another copy is running; stop it (Ctrl+C) and run `./start.sh` again |
 | `No space left on device` during install | free ~2 GB on the disk that holds the project |
 | Microphone does not work | open the app at `http://localhost:3000` (not a LAN IP) and allow the microphone |
@@ -280,7 +279,7 @@ avenza-ai/
             ├── extract.py      PDF/DOCX/PPTX/XLSX/... extraction and OCR
             ├── nlp.py          sentence splitting, chunking, query analysis
             ├── factcheck.py    figure check
-            ├── llm.py          LLM API client and local embeddings
+            ├── llm.py          LLM API client and embeddings
             └── voice_answer.py LLM-free spoken answers
 ```
 
@@ -296,7 +295,7 @@ The browser only talks to Next.js (`/api/*`); Next.js calls Flask server-to-serv
 | `POST /chat` | `{messages, agentId, mode, webSearch, memory, files, images}` → NDJSON stream of `tool`, `sources`, `token`, `done`, `error` events |
 | `GET/POST /documents`, `GET/DELETE /documents/<id>` | upload, indexing progress, delete |
 | `POST /voice/transcribe`, `POST /voice/speak`, `GET /voice/voices` | speech-to-text, text-to-speech |
-| `GET /health` | status of the LLM key, Ollama and the news index |
+| `GET /health` | status of the LLM key, embeddings and the news index |
 
 Errors are non-2xx responses with `{"error": "message"}`.
 
@@ -304,7 +303,7 @@ Errors are non-2xx responses with `{"error": "message"}`.
 
 ## Privacy
 
-- Runs on your machine: the web app, backend, database, document index, embeddings, reranker, speech-to-text and text-to-speech.
+- Runs on your machine: the web app, backend, database, document index, reranker, speech-to-text and text-to-speech.
 - Sent to the LLM API: your question and the source passages used to answer it (and attached images). Voice questions are sent the same way; your audio never leaves your machine (speech-to-text is local).
 - Sent to the search engine: the search query, when web search is on.
 - `.env.local`, the database and your documents (`backend/instance/`) are git-ignored and never committed.

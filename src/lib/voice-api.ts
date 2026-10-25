@@ -1,10 +1,11 @@
+import type { ModelId } from "@/config/features";
 import { ApiError } from "@/lib/api-error";
 import { isPreviewMode } from "@/lib/api-client";
 
 export type VoiceCommand =
   | { name: "new_chat" | "stop" | "exit_voice" }
   | { name: "toggle_web"; value: boolean }
-  | { name: "set_mode"; value: "fast" | "accurate" }
+  | { name: "set_mode"; value: ModelId }
   | { name: "web_search"; query: string };
 
 export interface Transcription {

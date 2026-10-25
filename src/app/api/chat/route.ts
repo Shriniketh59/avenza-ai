@@ -9,9 +9,10 @@ const chatSchema = z.object({
     .min(1)
     .max(200),
   agentId: z.string().optional(),
+  skillId: z.string().max(64).optional(),
   memory: z.boolean().optional(),
   webSearch: z.boolean().optional(),
-  mode: z.enum(["fast", "accurate"]).optional(),
+  mode: z.enum(["flash", "plus"]).optional(),
   voice: z.boolean().optional(),
   images: z.array(z.string().startsWith("data:image/").max(6_000_000)).max(4).optional(),
   files: z.array(z.string().min(1).max(64)).max(20).optional(),
@@ -40,7 +41,9 @@ export async function POST(request: Request) {
       headers: { Accept: "application/x-ndjson" },
     });
     if (!upstream.ok || !upstream.body) {
-      const body = (await upstream.json().catch(() => ({}))) as { error?: string };
+      const body = (await upstream.json().catch(() => ({}))) as { error?: string; code?: string };
+      // Usage limit reached: pass the 429 and its reset message through unchanged.
+      if (upstream.status === 429) return Response.json(body, { status: 429 });
       return Response.json({ error: body.error ?? "The assistant failed to respond." }, { status: 502 });
     }
     return new Response(upstream.body, {

@@ -145,8 +145,20 @@ def rank(query: str, docs=(), news=(), web=()) -> list[dict]:
     return sorted(kept, key=lambda it: -it["score"])
 
 
-def top(items: list[dict]) -> list[dict]:
-    """Best passages overall, with no source repeated more than twice."""
+LENGTH_RULES = {
+    "brief": "Length: the user wants a short answer. Reply in 1-3 sentences (under about 60 words), direct answer "
+             "first. No headings or long lists.",
+    "detailed": "Length: the user asked for a detailed explanation. Write a thorough, well-organised answer of at "
+                "least 600 words (up to about 1200): a short opening that answers directly, then ## headings for each part (background, "
+                "how it works or what happened, key points, examples, significance or implications, as fits the topic), "
+                "with bullets or a table where they help, and a short summary at the end. Cover the topic fully; use the "
+                "sources for every specific fact, figure and date, and say plainly where they are silent.",
+}
+
+
+def top(items: list[dict], limit: int | None = None) -> list[dict]:
+    """Best passages overall (limit, default MAX_CONTEXT_PASSAGES), with no source repeated more than twice."""
+    limit = limit or current_app.config["MAX_CONTEXT_PASSAGES"]
     picked, per_source = [], {}
     for it in sorted(items, key=lambda it: -it.get("score", 0.0)):
         key = it.get("url") or it.get("filename") or it["label"]
@@ -154,13 +166,13 @@ def top(items: list[dict]) -> list[dict]:
             continue
         per_source[key] = per_source.get(key, 0) + 1
         picked.append(it)
-        if len(picked) >= current_app.config["MAX_CONTEXT_PASSAGES"]:
+        if len(picked) >= limit:
             break
     return picked
 
 
 def build_messages(history, items: list[dict], memories, analysis: QueryAnalysis, pending=(), searched: bool = False,
-                   agent=None, understood=None, images=()) -> list[dict]:
+                   agent=None, understood=None, images=(), passage_chars: int = 1800) -> list[dict]:
     now = datetime.now().astimezone()
     system = (
         SYSTEM_PROMPT
@@ -207,7 +219,7 @@ def build_messages(history, items: list[dict], memories, analysis: QueryAnalysis
         for i, it in enumerate(items):
             head = f"[{i + 1}] {it['kind']}: {it['label']}" + (f" — {it['title']}" if it.get("title") else "")
             head += f" (page {it['page']})" if it.get("page") else ""
-            blocks.append(f"{head}\n{it['text'][:1800]}")
+            blocks.append(f"{head}\n{it['text'][:passage_chars]}")
         turns[-1] = {
             "role": "user",
             "content": (

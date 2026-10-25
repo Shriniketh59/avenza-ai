@@ -1,3 +1,5 @@
+import type { ModelId } from "@/config/features";
+
 export type MessageRole = "user" | "assistant" | "system";
 
 export type MessageStatus = "pending" | "streaming" | "complete" | "stopped" | "error";
@@ -20,7 +22,7 @@ export interface AttachmentMeta {
 
 export interface Source {
   index: number;
-  kind?: "document" | "news" | "web";
+  kind?: "document" | "news" | "web" | "image" | "plugin";
   title?: string | null;
   url?: string | null;
   filename: string;
@@ -64,9 +66,11 @@ export interface ChatRequest {
   conversationId: string;
   messages: Pick<ChatMessage, "role" | "content">[];
   agentId?: string;
+  /** User skill to apply; omitted = AVENZA matches one by name, if any. */
+  skillId?: string;
   memory?: boolean;
   webSearch?: boolean;
-  mode?: "fast" | "accurate";
+  mode?: ModelId;
   /** Spoken conversation: ask for short, speakable answers. */
   voice?: boolean;
   /** Images for the vision model (JPEG data URLs) from the latest message that has them. */

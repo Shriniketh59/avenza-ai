@@ -35,6 +35,20 @@ export const Markdown = memo(function Markdown({ content }: { content: string })
               </a>
             );
           },
+          img({ src, alt }) {
+            if (typeof src !== "string") return null;
+            return (
+              <span className="my-2 block">
+                {/* eslint-disable-next-line @next/next/no-img-element -- generated images are served from our own API */}
+                <img src={src} alt={alt ?? ""} loading="lazy" className="max-h-[512px] max-w-full rounded-xl border border-border" />
+                {src.startsWith("/api/images/") && (
+                  <a href={src} download={`avenza-${src.split("/").pop()}.png`} className="mt-1 inline-block text-xs text-muted hover:text-foreground">
+                    Download image
+                  </a>
+                )}
+              </span>
+            );
+          },
           table({ children }) {
             return (
               <div className="overflow-x-auto">

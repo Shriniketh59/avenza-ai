@@ -35,8 +35,6 @@ ok "Node.js $(node -v)"
 command -v python3 >/dev/null || die "Python 3.11+ is required: https://www.python.org"
 python3 -c 'import sys; sys.exit(0 if sys.version_info >= (3, 11) else 1)' || die "Python 3.11+ is required (found $(python3 -V))."
 ok "$(python3 -V)"
-command -v ollama >/dev/null || die "Ollama is required for local embeddings: curl -fsSL https://ollama.com/install.sh | sh"
-ok "Ollama $(ollama -v 2>/dev/null | awk '{print $NF}')"
 
 bold "2/6 Configuration (.env.local)"
 if [[ ! -f .env.local ]]; then
@@ -49,16 +47,7 @@ if [[ -z "$(env_get AUTH_SECRET)" ]]; then
 fi
 [[ -z "$(env_get FLASK_API_URL)" ]] && env_set FLASK_API_URL "http://127.0.0.1:5000"
 if [[ -z "$(env_get LLM_API_KEY)$(env_get GEMINI_API_KEY)$(env_get DEEPSEEK_API_KEY)" ]]; then
-  if [[ -n "${LLM_API_KEY:-}" ]]; then
-    env_set LLM_API_KEY "$LLM_API_KEY"
-    ok "LLM_API_KEY taken from the environment"
-  elif [[ -t 0 ]]; then
-    read -r -s -p "  Paste your LLM API key (Enter to skip): " key; echo
-    if [[ -n "$key" ]]; then env_set LLM_API_KEY "$key"; ok "saved LLM_API_KEY"; fi
-  fi
-fi
-if [[ -z "$(env_get LLM_API_KEY)$(env_get GEMINI_API_KEY)$(env_get DEEPSEEK_API_KEY)" ]]; then
-  warn "no LLM_API_KEY yet: the app runs, but chat replies need it (add it to .env.local, then restart)"
+  warn "no LLM API key yet: add GEMINI_API_KEY to .env.local, then restart"
 else
   ok "LLM API key set"
 fi
@@ -91,17 +80,8 @@ ok "npm packages installed"
 
 bold "5/6 Local models"
 mkdir -p backend/instance
-if ! curl -sf -m 2 http://127.0.0.1:11434/api/tags >/dev/null; then
-  nohup ollama serve > backend/instance/ollama.log 2>&1 &
-  for _ in $(seq 1 30); do curl -sf -m 1 http://127.0.0.1:11434/api/tags >/dev/null && break; sleep 0.5; done
-  curl -sf -m 2 http://127.0.0.1:11434/api/tags >/dev/null || die "Ollama did not start; see backend/instance/ollama.log"
-  ok "started Ollama"
-fi
-EMBED_MODEL="$(env_get EMBED_MODEL)"; EMBED_MODEL="${EMBED_MODEL:-nomic-embed-text}"
-if ! curl -sf http://127.0.0.1:11434/api/tags | grep -q "\"$EMBED_MODEL"; then
-  ollama pull "$EMBED_MODEL"
-fi
-ok "embedding model $EMBED_MODEL"
+EMBED_MODEL="$(env_get EMBED_MODEL)"
+ok "embeddings: Gemini API (${EMBED_MODEL:-gemini-embedding-2}, uses GEMINI_API_KEY)"
 VOICE="$(env_get DEFAULT_VOICE)"; VOICE="${VOICE:-en_US-lessac-medium}"
 if [[ ! -f "backend/instance/voices/$VOICE.onnx" ]]; then
   mkdir -p backend/instance/voices

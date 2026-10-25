@@ -18,7 +18,7 @@ _COMMANDS: list[tuple[re.Pattern, str]] = [
     (re.compile(r"^(stop|cancel|be quiet|stop talking|shut up)\.?$", re.I), "stop"),
     (re.compile(r"^(exit|close|end|quit) (voice|voice mode|conversation)\.?$|^goodbye\.?$|^bye\.?$", re.I), "exit_voice"),
     (re.compile(r"^(turn|switch) (on|off) (the )?web search\.?$", re.I), "toggle_web"),
-    (re.compile(r"^(switch|change) to (fast|accurate) mode\.?$", re.I), "set_mode"),
+    (re.compile(r"^(switch|change) to (?:avenza )?(flash|plus|fast|accurate)(?: mode| model)?\.?$", re.I), "set_mode"),
 ]
 _SEARCH = re.compile(r"^(please )?(search( the web| online| google)? for|look up|google) (?P<q>.+?)\.?$", re.I)
 
@@ -51,7 +51,8 @@ def detect_command(text: str) -> dict | None:
             if name == "toggle_web":
                 return {"name": name, "value": m.group(2).lower() == "on"}
             if name == "set_mode":
-                return {"name": name, "value": m.group(2).lower()}
+                value = m.group(2).lower()
+                return {"name": name, "value": {"fast": "flash", "accurate": "plus"}.get(value, value)}
             return {"name": name}
     m = _SEARCH.match(t)
     if m:

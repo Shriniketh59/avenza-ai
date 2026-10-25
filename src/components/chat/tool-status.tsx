@@ -13,6 +13,11 @@ const LABELS: Record<string, string> = {
   web_search: "Web search",
   agent: "Agent",
   understand: "Understanding",
+  read_image: "Reading image (OCR)",
+  model: "Model",
+  generate_image: "Generating image",
+  plugin: "Plugin",
+  skill: "Skill",
 };
 
 /** Renders tool-execution events streamed by the agent backend. */

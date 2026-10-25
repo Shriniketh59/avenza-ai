@@ -168,6 +168,7 @@ export function ConversationProvider({ userId, children }: { userId: string; chi
           webSearch: prefsRef.current.webSearch,
           mode: prefsRef.current.mode,
           agentId: prefsRef.current.agent,
+          skillId: prefsRef.current.skill || undefined,
           voice: options.voice,
           ...attachmentsFor(history),
         },

@@ -1,4 +1,6 @@
 import type { ChatRequest, ChatStreamEvent, UploadedDocument } from "@/types/chat";
+import type { Plugin, Skill, SkillInput } from "@/types/extensions";
+import type { UsageSummary } from "@/types/usage";
 import type { User } from "@/types/user";
 import { ApiError } from "@/lib/api-error";
 import { localAuth } from "@/lib/local-auth";
@@ -79,6 +81,24 @@ export const documentsApi = {
     if (!res.ok || !body.document) throw new ApiError(body.error ?? "Upload failed.", res.status);
     return { document: body.document };
   },
+};
+
+export const skillsApi = {
+  list: () => request<{ skills: Skill[] }>("/api/skills"),
+  create: (input: SkillInput) => request<{ skill: Skill }>("/api/skills", { method: "POST", body: JSON.stringify(input) }),
+  update: (id: string, input: Partial<SkillInput>) =>
+    request<{ skill: Skill }>(`/api/skills/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(input) }),
+  remove: (id: string) => request<{ ok: true }>(`/api/skills/${encodeURIComponent(id)}`, { method: "DELETE" }),
+};
+
+export const pluginsApi = {
+  list: () => request<{ plugins: Plugin[] }>("/api/plugins"),
+  toggle: (id: string, enabled: boolean) =>
+    request<{ plugin: Plugin }>(`/api/plugins/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify({ enabled }) }),
+};
+
+export const usageApi = {
+  get: () => request<{ usage: UsageSummary }>("/api/usage"),
 };
 
 export const memoryApi = {

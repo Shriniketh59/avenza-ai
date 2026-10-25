@@ -23,6 +23,32 @@ CREATE TABLE IF NOT EXISTS documents (
     status      TEXT NOT NULL DEFAULT 'ready',
     created_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
 );
+CREATE TABLE IF NOT EXISTS usage_events (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id        INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    at             REAL NOT NULL,
+    model          TEXT NOT NULL,
+    input_tokens   INTEGER NOT NULL,
+    output_tokens  INTEGER NOT NULL,
+    weighted       INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS usage_events_user_at ON usage_events(user_id, at);
+CREATE TABLE IF NOT EXISTS skills (
+    id            TEXT PRIMARY KEY,
+    user_id       INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    name          TEXT NOT NULL,
+    description   TEXT NOT NULL DEFAULT '',
+    instructions  TEXT NOT NULL,
+    created_at    TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+    updated_at    TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+);
+CREATE INDEX IF NOT EXISTS skills_user ON skills(user_id);
+CREATE TABLE IF NOT EXISTS user_plugins (
+    user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    plugin_id  TEXT NOT NULL,
+    enabled    INTEGER NOT NULL,
+    PRIMARY KEY (user_id, plugin_id)
+);
 CREATE TABLE IF NOT EXISTS password_resets (
     token_hash  TEXT PRIMARY KEY,
     user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useSyncExternalStore } from "react";
-import type { AgentId } from "@/config/features";
+import type { AgentId, ModelId } from "@/config/features";
 
 export interface Preferences {
   showTimestamps: boolean;
@@ -15,9 +15,12 @@ export interface Preferences {
   autoSendVoice: boolean;
   memoryEnabled: boolean;
   webSearch: boolean;
-  mode: "fast" | "accurate";
+  /** Avenza Flash or Avenza Plus. */
+  mode: ModelId;
   /** Specialist agent id, or "auto" to pick one per question. */
   agent: AgentId;
+  /** User skill id to apply to every message; "" = none (a skill named in the message still applies). */
+  skill: string;
 }
 
 const KEY = "avenza.preferences";
@@ -31,8 +34,9 @@ const DEFAULTS: Preferences = {
   autoSendVoice: false,
   memoryEnabled: true,
   webSearch: true,
-  mode: "fast",
+  mode: "flash",
   agent: "auto",
+  skill: "",
 };
 
 const listeners = new Set<() => void>();
@@ -42,6 +46,9 @@ function read(): Preferences {
   if (cache) return cache;
   try {
     cache = { ...DEFAULTS, ...JSON.parse(localStorage.getItem(KEY) ?? "{}") };
+    // Saved before the models were named: "fast" / "accurate".
+    const legacy = { fast: "flash", accurate: "plus" } as Record<string, ModelId>;
+    cache!.mode = legacy[cache!.mode] ?? (cache!.mode === "plus" ? "plus" : "flash");
   } catch {
     cache = DEFAULTS;
   }

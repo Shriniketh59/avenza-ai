@@ -2,6 +2,7 @@
 
 import { Mic, MicOff, X } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { MODELS } from "@/config/features";
 import { useConversations } from "@/hooks/conversation-store";
 import { usePreferences } from "@/hooks/use-preferences";
 import { MicrophoneError, useRecorder } from "@/hooks/use-recorder";
@@ -109,7 +110,7 @@ export function VoiceMode({ onClose }: { onClose: () => void }) {
           return say(`Web search is now ${command.value ? "on" : "off"}.`);
         case "set_mode":
           updatePrefs({ mode: command.value });
-          return say(`Switched to ${command.value} mode.`);
+          return say(`Switched to ${MODELS.find((m) => m.id === command.value)?.name ?? command.value}.`);
         case "web_search":
           updatePrefs({ webSearch: true });
           return ask(text);

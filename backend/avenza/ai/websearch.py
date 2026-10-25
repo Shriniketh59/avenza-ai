@@ -1,7 +1,6 @@
 """Live web search: DuckDuckGo (no API key) -> fetch pages -> pick the passages most relevant to the question."""
 import math
 import re
-import time
 import unicodedata
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -17,16 +16,35 @@ from . import nlp
 _HEADERS = {"User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130 Safari/537.36"}
 
 
-def _search(query: str, n: int) -> list[dict]:
-    for attempt in range(2):  # DuckDuckGo intermittently returns nothing under rate limiting
-        try:
-            results = list(DDGS().text(query, max_results=n, safesearch="moderate"))
-            if results:
+# Engines raced in parallel; the first with results wins. Single engines often return nothing when they rate-limit
+# or block this machine (measured 2026-10-25: DuckDuckGo, Brave, Google and Mojeek empty; Yahoo, Bing and
+# Wikipedia answered), and trying them one after another took longer than a Flash reply can wait.
+_BACKENDS = ("auto", "yahoo", "bing", "wikipedia")
+
+
+def _one(query: str, n: int, backend: str) -> list[dict]:
+    return list(DDGS().text(query, max_results=n, safesearch="moderate", backend=backend))
+
+
+def _search(query: str, n: int, timeout: float = 8.0) -> list[dict]:
+    pool = ThreadPoolExecutor(max_workers=len(_BACKENDS))
+    futures = {pool.submit(_one, query, n, b): b for b in _BACKENDS}
+    best: list[dict] = []
+    try:
+        for fut in as_completed(futures, timeout=timeout):
+            try:
+                results = fut.result()
+            except Exception as exc:  # rate limits / network / blocked engine
+                current_app.logger.info("web search via %s failed: %s", futures[fut], exc)
+                continue
+            if len(results) >= min(3, n):
                 return results
-        except Exception as exc:  # rate limits / network
-            current_app.logger.warning("web search failed (attempt %d): %s", attempt + 1, exc)
-        time.sleep(0.5)
-    return []
+            best = best or results  # Wikipedia alone often returns one page: keep it unless a fuller list arrives
+    except TimeoutError:
+        current_app.logger.warning("web search: no engine answered within %.0f s", timeout)
+    finally:
+        pool.shutdown(wait=False, cancel_futures=True)
+    return best
 
 
 # Wikipedia-style reference markers ("[82]", "[citation needed]") break sentence boundaries.
@@ -132,10 +150,11 @@ def _bm25(query: str, docs: list[str], k1: float = 1.4, b: float = 0.75) -> list
 def search(query: str, fast: bool = False) -> list[dict]:
     """Return passages: {"text", "title", "url", "site"} ranked by relevance to the query.
 
-    fast (voice): read fewer pages under a shorter deadline; search snippets still cover the rest.
+    fast (voice, Avenza Flash): read fewer pages under a shorter deadline; search snippets still cover the rest.
     """
     cfg = current_app.config
-    results = _search(query, cfg["WEB_SEARCH_RESULTS"])
+    # Flash/voice leave time for reading pages and the reply within their 6 s budget.
+    results = _search(query, cfg["WEB_SEARCH_RESULTS"], timeout=3.5 if fast else 8.0)
     if not results:
         return []
 

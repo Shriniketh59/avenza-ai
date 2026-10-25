@@ -19,3 +19,7 @@ onnxruntime==1.30.0
 tokenizers==0.23.2
 huggingface_hub==1.33.0
 numpy==2.5.3
+# Stock prices plugin (handles Yahoo Finance's cookie check)
+yfinance==1.7.0
+# OCR for uploaded images and scanned pages
+rapidocr_onnxruntime==1.2.3
