@@ -255,8 +255,8 @@ If you prefer to run the steps yourself:
 cp .env.example .env.local          # then set LLM_API_KEY and AUTH_SECRET (openssl rand -base64 48)
 
 # 2. backend
-python3 -m venv backend/.venv
-backend/.venv/bin/pip install -r backend/requirements.txt
+uv venv --python 3.13 backend/.venv      # uv: https://docs.astral.sh/uv/ (start.sh installs it for you)
+uv pip install --python backend/.venv/bin/python -r backend/requirements.txt
 backend/.venv/bin/python -m piper.download_voices en_US-lessac-medium --data-dir backend/instance/voices
 
 # 3. frontend + start both servers

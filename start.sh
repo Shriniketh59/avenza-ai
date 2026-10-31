@@ -12,10 +12,10 @@ bold() { printf '\033[1m%s\033[0m\n' "$*"; }
 ok() { printf '  \033[32m✓\033[0m %s\n' "$*"; }
 warn() { printf '  \033[33m!\033[0m %s\n' "$*"; }
 die() { printf '  \033[31m✗\033[0m %s\n' "$*" >&2; exit 1; }
-hash_of() { python3 -c 'import hashlib,sys; print(hashlib.sha256(open(sys.argv[1],"rb").read()).hexdigest())' "$1"; }
+hash_of() { "$PY" -c 'import hashlib,sys; print(hashlib.sha256(open(sys.argv[1],"rb").read()).hexdigest())' "$1"; }
 env_get() { grep -E "^$1=" .env.local 2>/dev/null | tail -1 | cut -d= -f2- || true; }
 env_set() { # replace or append KEY=VALUE in .env.local
-  python3 - "$1" "$2" <<'PY'
+  "$PY" - "$1" "$2" <<'PY'
 import re, sys
 key, value = sys.argv[1], sys.argv[2]
 text = open(".env.local").read()
@@ -29,12 +29,36 @@ SETUP_ONLY=0
 [[ "${1:-}" == "--setup-only" ]] && SETUP_ONLY=1
 
 bold "1/6 Checking prerequisites"
-command -v node >/dev/null || die "Node.js 20+ is required: https://nodejs.org"
-[[ "$(node -p 'process.versions.node.split(".")[0]')" -ge 20 ]] || die "Node.js 20+ is required (found $(node -v))."
+# Node 20+. The system Node can be older (Linux Mint ships 18): use the one installed with nvm when it is.
+node_ok() { command -v node >/dev/null && [[ "$(node -p 'process.versions.node.split(".")[0]' 2>/dev/null)" -ge 20 ]]; }
+if ! node_ok && [[ -s "$HOME/.nvm/nvm.sh" ]]; then
+  set +u; source "$HOME/.nvm/nvm.sh" >/dev/null; node_ok || nvm use --silent default >/dev/null 2>&1 || true; set -u
+  if ! node_ok; then
+    latest="$(ls -d "$HOME"/.nvm/versions/node/v* 2>/dev/null | sort -V | tail -1)"
+    [[ -n "$latest" ]] && export PATH="$latest/bin:$PATH"
+  fi
+fi
+node_ok || die "Node.js 20+ is required (found $(node -v 2>/dev/null || echo none)): https://nodejs.org"
 ok "Node.js $(node -v)"
-command -v python3 >/dev/null || die "Python 3.11+ is required: https://www.python.org"
-python3 -c 'import sys; sys.exit(0 if sys.version_info >= (3, 11) else 1)' || die "Python 3.11+ is required (found $(python3 -V))."
-ok "$(python3 -V)"
+# Python 3.13 from uv, kept in the home folder. System Pythons differ between shells (the desktop's and a
+# sandboxed editor's), and some lack venv, so the backend's environment is built on this one: it then works in
+# every shell, without sudo.
+export UV_PYTHON_INSTALL_DIR="$HOME/.local/share/uv/python"
+UV="$(command -v uv || echo "$HOME/.local/bin/uv")"
+if [[ ! -x "$UV" ]]; then
+  echo "  installing uv (Python manager, ~20 MB, once)…"
+  mkdir -p "$HOME/.local/bin"
+  curl -fsSL https://github.com/astral-sh/uv/releases/latest/download/uv-x86_64-unknown-linux-gnu.tar.gz \
+    | tar -xz --strip-components=1 -C "$HOME/.local/bin" || die "Could not download uv. Check the internet connection."
+  UV="$HOME/.local/bin/uv"
+fi
+PY="$("$UV" python find 3.13 --managed-python 2>/dev/null || true)"
+if [[ -z "$PY" ]]; then
+  echo "  installing Python 3.13 (~30 MB, once)…"
+  "$UV" python install 3.13 >/dev/null 2>&1 || die "Could not install Python 3.13 with uv."
+  PY="$("$UV" python find 3.13 --managed-python)"
+fi
+ok "Python $("$PY" -c 'import platform; print(platform.python_version())') (uv)"
 
 bold "2/6 Configuration (.env.local)"
 if [[ ! -f .env.local ]]; then
@@ -42,7 +66,7 @@ if [[ ! -f .env.local ]]; then
   ok "created .env.local from .env.example"
 fi
 if [[ -z "$(env_get AUTH_SECRET)" ]]; then
-  env_set AUTH_SECRET "$(python3 -c 'import secrets; print(secrets.token_urlsafe(48))')"
+  env_set AUTH_SECRET "$("$PY" -c 'import secrets; print(secrets.token_urlsafe(48))')"
   ok "generated AUTH_SECRET"
 fi
 [[ -z "$(env_get FLASK_API_URL)" ]] && env_set FLASK_API_URL "http://127.0.0.1:5000"
@@ -53,17 +77,23 @@ else
 fi
 
 bold "3/6 Python backend (backend/.venv)"
-if [[ ! -x backend/.venv/bin/python ]]; then
-  python3 -m venv backend/.venv || die "Could not create a virtualenv. On Debian/Ubuntu: sudo apt install python3-venv"
+# The environment must be built on uv's Python: one made by another Python (an older AVENZA, or a different
+# shell's system Python) fails in shells that cannot run that Python ("No module named 'flask'").
+if ! grep -q "^home = $UV_PYTHON_INSTALL_DIR/" backend/.venv/pyvenv.cfg 2>/dev/null || ! backend/.venv/bin/python -V >/dev/null 2>&1; then
+  if [[ -d backend/.venv ]]; then
+    warn "rebuilding backend/.venv on the shared Python 3.13 (it was made by another Python)"
+    rm -rf backend/.venv
+  fi
+  "$UV" venv --quiet --python "$PY" backend/.venv || die "Could not create backend/.venv."
   ok "created virtualenv"
 fi
 REQ_HASH="$(hash_of backend/requirements.txt)"
-if [[ "$(cat backend/.venv/.requirements.sha256 2>/dev/null)" != "$REQ_HASH" ]]; then
+if [[ "$(cat backend/.venv/.requirements.sha256 2>/dev/null)" != "$REQ_HASH" ]] || ! backend/.venv/bin/python -c "import flask" 2>/dev/null; then
   echo "  installing Python packages (first run takes a few minutes)…"
   # Unpack on the project disk: /tmp is often a small RAM disk and these packages need ~1 GB.
   mkdir -p backend/.venv/.tmp
-  TMPDIR="$PWD/backend/.venv/.tmp" backend/.venv/bin/python -m pip install -q --upgrade pip
-  TMPDIR="$PWD/backend/.venv/.tmp" backend/.venv/bin/python -m pip install -q -r backend/requirements.txt
+  TMPDIR="$PWD/backend/.venv/.tmp" "$UV" pip install --quiet --python backend/.venv/bin/python -r backend/requirements.txt \
+    || die "Installing the Python packages failed (see the messages above)."
   rm -rf backend/.venv/.tmp
   echo "$REQ_HASH" > backend/.venv/.requirements.sha256
 fi

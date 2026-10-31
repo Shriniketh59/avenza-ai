@@ -32,8 +32,13 @@ DESK="$(xdg-user-dir DESKTOP 2>/dev/null || echo "$HOME/Desktop")"
 if [[ -d "$DESK" ]]; then
   cp "$APPS/avenza-ai.desktop" "$DESK/avenza-ai.desktop"
   chmod +x "$DESK/avenza-ai.desktop"
-  # Cinnamon/GNOME ask before running an untrusted launcher; mark ours trusted.
-  command -v gio >/dev/null && gio set "$DESK/avenza-ai.desktop" metadata::trusted true 2>/dev/null || true
+  # Cinnamon/GNOME ask before running an untrusted launcher; mark ours trusted (on the host when run from a
+  # Flatpak editor's terminal, where gio would only write the sandbox's metadata).
+  if command -v flatpak-spawn >/dev/null && [[ -f /.flatpak-info ]]; then
+    flatpak-spawn --host gio set "$DESK/avenza-ai.desktop" metadata::trusted true 2>/dev/null || true
+  elif command -v gio >/dev/null; then
+    gio set "$DESK/avenza-ai.desktop" metadata::trusted true 2>/dev/null || true
+  fi
 fi
 command -v update-desktop-database >/dev/null && update-desktop-database "$APPS" 2>/dev/null || true
 command -v gtk-update-icon-cache >/dev/null && gtk-update-icon-cache -q "$ICONS" 2>/dev/null || true
