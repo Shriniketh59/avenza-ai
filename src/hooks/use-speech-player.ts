@@ -1,11 +1,16 @@
 "use client";
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { isIOS, setAudioMode, speechAudio } from "@/lib/audio-unlock";
 import { voiceApi } from "@/lib/voice-api";
 
 interface Options {
   voice: string;
+  /** The user's voice for each language (Settings). */
+  voices?: Record<string, string>;
   speed: number;
+  /** Language code of what is spoken, when known (helps pick a voice of that language). */
+  language?: string;
   /** Called when the queue has fully played out. */
   onIdle?: () => void;
 }
@@ -18,6 +23,9 @@ interface Meter {
 
 /** Route playback through an analyser once, so the visualizer can follow the real voice. */
 function attachMeter(meter: { current: Meter | null }, el: HTMLAudioElement) {
+  // iPhone/iPad: an element routed through Web Audio plays into a context Safari keeps suspended, which is
+  // silent. Play it directly there; the visualizer uses its gentle pulse instead.
+  if (isIOS()) return;
   if (meter.current) {
     if (meter.current.ctx.state === "suspended") void meter.current.ctx.resume();
     return;
@@ -34,12 +42,21 @@ function attachMeter(meter: { current: Meter | null }, el: HTMLAudioElement) {
   }
 }
 
+// Non-Latin scripts name their language: used to pick the device voice when the reply's language is not known.
+const SCRIPTS: [RegExp, string][] = [
+  [/[\u0b80-\u0bff]/, "ta"], [/[\u0c80-\u0cff]/, "kn"], [/[\u0a80-\u0aff]/, "gu"], [/[\u0a00-\u0a7f]/, "pa"],
+  [/[\u0c00-\u0c7f]/, "te"], [/[\u0d00-\u0d7f]/, "ml"], [/[\u0980-\u09ff]/, "bn"], [/[\u0900-\u097f]/, "hi"],
+  [/[\u0600-\u06ff]/, "ar"], [/[\u0400-\u04ff]/, "ru"], [/[\u3040-\u30ff]/, "ja"], [/[\uac00-\ud7af]/, "ko"],
+  [/[\u4e00-\u9fff]/, "zh"], [/[\u0e00-\u0e7f]/, "th"], [/[\u0590-\u05ff]/, "he"], [/[\u0370-\u03ff]/, "el"],
+];
+const scriptLanguage = (text: string) => SCRIPTS.find(([re]) => re.test(text))?.[1];
+
 /**
  * Plays sentences in order through the local Piper voice, prefetching the next
  * sentence while the current one plays. Falls back to the browser voice if the
  * backend cannot synthesise.
  */
-export function useSpeechPlayer({ voice, speed, onIdle }: Options) {
+export function useSpeechPlayer({ voice, voices, speed, language, onIdle }: Options) {
   const [speaking, setSpeaking] = useState(false);
   /** The sentence being spoken right now (for live captions). */
   const [current, setCurrent] = useState("");
@@ -50,19 +67,25 @@ export function useSpeechPlayer({ voice, speed, onIdle }: Options) {
   const generation = useRef(0);
   const audio = useRef<HTMLAudioElement | null>(null);
   const abort = useRef<AbortController | null>(null);
-  const opts = useRef({ voice, speed, onIdle });
+  const opts = useRef({ voice, voices, speed, language, onIdle });
   // Indirection so playNext can schedule itself from audio callbacks.
   const next = useRef<() => void>(() => {});
 
   useEffect(() => {
-    opts.current = { voice, speed, onIdle };
+    opts.current = { voice, voices, speed, language, onIdle };
   });
 
   const fetchAudio = useCallback((text: string) => {
     let p = pending.current.get(text);
     if (!p) {
       abort.current ??= new AbortController();
-      p = voiceApi.speak(text, { voice: opts.current.voice, speed: opts.current.speed, signal: abort.current.signal });
+      p = voiceApi.speak(text, {
+        voice: opts.current.voice,
+        voices: opts.current.voices,
+        speed: opts.current.speed,
+        language: opts.current.language,
+        signal: abort.current.signal,
+      });
       p.catch(() => {}); // handled when consumed
       pending.current.set(text, p);
     }
@@ -94,7 +117,8 @@ export function useSpeechPlayer({ voice, speed, onIdle }: Options) {
       const blob = await blobPromise;
       if (gen !== generation.current) return;
       const url = URL.createObjectURL(blob);
-      const el = (audio.current ??= new Audio());
+      // The shared element: unlocked by the tap that opened voice mode, so phones allow it to play now.
+      const el = (audio.current ??= speechAudio());
       attachMeter(meter, el);
       el.src = url;
       const finish = () => {
@@ -103,13 +127,21 @@ export function useSpeechPlayer({ voice, speed, onIdle }: Options) {
       };
       el.onended = finish;
       el.onerror = finish;
+      setAudioMode("play"); // iPhone: loudspeaker at media volume, not call level
       await el.play();
     } catch {
       if (gen !== generation.current) return;
-      // Fallback: the browser's own speech engine.
+      // Fallback: the device's own speech engine, which has voices for languages AVENZA has none installed for
+      // (Tamil, Kannada, Gujarati on Android and Chrome), and when the server cannot speak.
       if ("speechSynthesis" in window) {
-        const u = new SpeechSynthesisUtterance(text.replace(/[*#`_>|]/g, ""));
+        const u = new SpeechSynthesisUtterance(text.replace(/[*#`_>|]/g, "").replace(/\[\d+(?:,\s*\d+)*\]/g, ""));
         u.rate = opts.current.speed;
+        const lang = opts.current.language ?? scriptLanguage(text);
+        if (lang) {
+          u.lang = lang;
+          const match = window.speechSynthesis.getVoices().find((v) => v.lang.toLowerCase().startsWith(lang.toLowerCase()));
+          if (match) u.voice = match;
+        }
         u.onend = done;
         u.onerror = done;
         window.speechSynthesis.speak(u);

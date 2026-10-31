@@ -5,6 +5,8 @@ const MESSAGES: Record<string, string> = {
   google_exchange: "Google could not complete sign-in. Please try again.",
   google_unverified: "Your Google email address is not verified.",
   google_failed: "Google sign-in failed. Please try again.",
+  google_local_address:
+    "Google sign-in does not work on a Wi-Fi address like 192.168.x.x. Use email sign-in here, or open the app on its https address.",
 };
 
 export function authErrorMessage(code: string | undefined | null): string | null {

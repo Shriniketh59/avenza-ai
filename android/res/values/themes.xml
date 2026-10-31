@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Same navy as the web app (manifest background_color), so launch has no white flash. -->
+    <style name="AppTheme" parent="@android:style/Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/navy</item>
+        <item name="android:statusBarColor">@color/navy</item>
+        <item name="android:navigationBarColor">@color/navy</item>
+        <item name="android:colorAccent">#8B7CFF</item>
+    </style>
+    <color name="navy">#070F24</color>
+</resources>

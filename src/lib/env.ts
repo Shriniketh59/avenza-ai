@@ -15,6 +15,17 @@ export const env = {
 export const isGoogleConfigured = () => Boolean(env.googleClientId && env.googleClientSecret && env.authSecret);
 export const isBackendConfigured = () => Boolean(env.flaskApiUrl);
 
+/**
+ * The address the user actually opened, as https://host when a proxy or tunnel (Vercel, Cloudflare) says so.
+ * Behind those, request.url can show the internal http address instead.
+ */
+export function publicOrigin(request: Request): string {
+  const url = new URL(request.url);
+  const host = request.headers.get("x-forwarded-host")?.split(",")[0].trim() || request.headers.get("host") || url.host;
+  const proto = request.headers.get("x-forwarded-proto")?.split(",")[0].trim() || url.protocol.replace(":", "");
+  return `${proto}://${host}`;
+}
+
 export function requireAuthSecret(): Uint8Array {
   if (!env.authSecret || env.authSecret.length < 32) {
     throw new Error("AUTH_SECRET is missing or shorter than 32 characters.");

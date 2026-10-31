@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { setAudioMode } from "@/lib/audio-unlock";
 
 interface RecordOptions {
   /** Stop automatically after the speaker goes quiet. */
@@ -27,8 +28,11 @@ export function useRecorder() {
   const record = useCallback(async (opts: RecordOptions = {}): Promise<Blob | null> => {
     const { autoStop = true, silenceMs = 1100, noSpeechMs = 8000, maxMs = 30000 } = opts;
     if (!navigator.mediaDevices?.getUserMedia) {
-      throw new MicrophoneError("Microphone access needs a secure page. Open the app at http://localhost:3000.");
+      throw new MicrophoneError(
+        "The microphone only works on a secure (https) page. On a phone, open AVENZA on its https address, not 192.168.x.x.",
+      );
     }
+    setAudioMode("record"); // iPhone: the microphone only works in record mode
     let stream: MediaStream;
     try {
       stream = await navigator.mediaDevices.getUserMedia({
@@ -38,12 +42,17 @@ export function useRecorder() {
       throw new MicrophoneError("Microphone permission was denied. Allow it in the browser's address bar.");
     }
 
-    const mime = ["audio/webm;codecs=opus", "audio/ogg;codecs=opus", "audio/webm"].find((m) => MediaRecorder.isTypeSupported(m));
+    // iPhone Safari records AAC in MP4; the backend decodes all of these.
+    const mime = ["audio/webm;codecs=opus", "audio/ogg;codecs=opus", "audio/webm", "audio/mp4"].find((m) => MediaRecorder.isTypeSupported(m));
     const rec = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined);
     const chunks: Blob[] = [];
     rec.ondataavailable = (e) => e.data.size && chunks.push(e.data);
 
     const ctx = new AudioContext();
+    // Phones start an AudioContext paused unless a tap created it. A paused one measures silence, so the
+    // recorder would think nobody spoke and stop (or cut you off). Resume it, and if it stays paused, stop
+    // judging by loudness at all (see "blind" below).
+    if (ctx.state === "suspended") ctx.resume().catch(() => {});
     const analyser = ctx.createAnalyser();
     analyser.fftSize = 1024;
     ctx.createMediaStreamSource(stream).connect(analyser);
@@ -65,8 +74,11 @@ export function useRecorder() {
       const elapsed = now - started;
       setLevel(Math.min(1, rms * 9));
 
-      if (elapsed < 350) floor = Math.max(floor, rms); // calibrate background noise
+      // Calibrate background noise, capped: talking straight away must not raise the bar above your voice.
+      if (elapsed < 350) floor = Math.min(0.02, Math.max(floor, rms));
       const threshold = Math.max(0.012, floor * 2.5);
+      // The meter cannot hear (context never started): keep recording until the user stops or maxMs.
+      const blind = ctx.state !== "running" && elapsed > 1000;
       if (rms > threshold) {
         loudSince ||= now;
         quietSince = 0;
@@ -76,8 +88,8 @@ export function useRecorder() {
         quietSince ||= now;
       }
 
-      const silenceDone = autoStop && heard && quietSince && now - quietSince > silenceMs;
-      const nobody = autoStop && !heard && elapsed > noSpeechMs;
+      const silenceDone = autoStop && !blind && heard && quietSince && now - quietSince > silenceMs;
+      const nobody = autoStop && !blind && !heard && elapsed > noSpeechMs;
       if ((silenceDone || nobody || elapsed > maxMs) && rec.state === "recording") {
         if (nobody) cancelledRef.current = true;
         rec.stop();

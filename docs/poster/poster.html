@@ -1,0 +1,376 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>AVENZA AI Poster</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;0,8..60,700;1,8..60,400&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --navy: #13306b;
+    --blue: #2563c9;
+    --orange: #e07b1a;
+    --ink: #1b2333;
+    --ink2: #44506a;
+    --muted: #6b7690;
+    --line: #9db8e4;
+    --panel: #ffffff;
+    --tint: #eaf2fd;
+    --bg: #f4f8fe;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { background: var(--bg); }
+  body {
+    width: 1200px; height: 1800px; padding: 14px;
+    font-family: Inter, system-ui, sans-serif; color: var(--ink); font-size: 13px; line-height: 1.42;
+    display: flex; flex-direction: column; gap: 10px;
+  }
+  h2 { font-family: "Source Serif 4", Georgia, serif; font-size: 23px; font-weight: 700; color: var(--ink); margin-bottom: 8px; }
+  h3 { font-size: 13px; font-weight: 700; color: var(--navy); margin-bottom: 6px; }
+  .panel { background: var(--panel); border: 2px solid var(--line); border-radius: 4px; padding: 10px 14px; }
+  .panel > h2 { background: var(--tint); margin: -10px -14px 10px; padding: 6px 14px; border-bottom: 1px solid var(--line); }
+  .sub { border: 1px solid #c9daf3; border-radius: 6px; padding: 8px 10px; background: #fbfdff; }
+  ul { padding-left: 16px; } li { margin-bottom: 4px; }
+  .fig { font-size: 11px; color: var(--ink2); margin-top: 5px; }
+  .fig b { color: var(--ink); }
+  p.just { text-align: justify; }
+
+  /* header */
+  .inst { display: flex; justify-content: center; align-items: center; gap: 14px; }
+  .inst img { height: 92px; }
+  .inst .name { font-family: Inter, sans-serif; font-weight: 800; font-size: 40px; letter-spacing: 1px; color: var(--navy); line-height: 1; }
+  .inst .line2 { font-weight: 600; font-size: 17px; color: var(--navy); }
+  .inst .line3 { font-size: 11.5px; color: var(--ink2); }
+  .inst .line4 { font-weight: 700; font-size: 13.5px; color: var(--navy); margin-top: 2px; }
+  .title { text-align: center; background: var(--tint); border: 2px solid var(--blue); padding: 12px 16px; }
+  .title h1 { font-family: "Source Serif 4", Georgia, serif; font-size: 36px; line-height: 1.12; font-weight: 700; }
+  .title .tag { font-family: "Source Serif 4", Georgia, serif; font-style: italic; font-size: 19px; color: var(--ink2); margin: 4px 0; }
+  .title .authors { font-family: "Source Serif 4", Georgia, serif; font-size: 17px; font-weight: 600; }
+  .title .course { font-family: "Source Serif 4", Georgia, serif; font-size: 15px; color: var(--ink2); }
+
+  .main { display: grid; grid-template-columns: 330px 1fr; gap: 10px; flex: 1; min-height: 0; }
+  .col { display: flex; flex-direction: column; gap: 10px; min-height: 0; }
+
+  /* methodology */
+  .steps { display: flex; flex-direction: column; justify-content: space-between; height: calc(100% - 46px); gap: 6px; }
+  .step { display: grid; grid-template-columns: 40px 1fr; gap: 9px; align-items: center; border-radius: 8px; padding: 7px 10px; }
+  .step .n { width: 40px; height: 40px; border-radius: 50%; color: #fff; display: grid; place-items: center; font-weight: 700; font-size: 17px; }
+  .step b { display: block; font-size: 12.5px; }
+  .step span { font-size: 11.5px; color: var(--ink2); line-height: 1.35; display: block; }
+  .s1 { background: #e3effd; } .s1 .n { background: #2563c9; }
+  .s2 { background: #e2f5ee; } .s2 .n { background: #12866a; }
+  .s3 { background: #fdeedd; } .s3 .n { background: #c9660f; }
+  .s4 { background: #ece6fb; } .s4 .n { background: #6b46c1; }
+  .s5 { background: #fbe4ec; } .s5 .n { background: #c22f62; }
+  .arrow-down { text-align: center; color: var(--navy); font-size: 12px; line-height: 0.6; }
+
+  /* architecture */
+  .toprow { display: grid; grid-template-columns: 1fr 268px; gap: 10px; }
+  .arch { display: grid; grid-template-columns: 92px 14px 1fr 14px 1fr 14px 1fr 14px 112px; align-items: center; font-size: 11px; }
+  .arch .box { border: 1.5px dashed #8fb0e6; border-radius: 6px; padding: 6px; background: #f7faff; display: flex; flex-direction: column; gap: 5px; height: 100%; justify-content: center; }
+  .arch .t { font-weight: 700; font-size: 11.5px; text-align: center; color: var(--ink); }
+  .chip { border-radius: 5px; padding: 4px 5px; text-align: center; font-size: 10.5px; line-height: 1.25; border: 1px solid; }
+  .c-blue { background: #dfeafb; border-color: #9ebce9; }
+  .c-green { background: #dcf2e8; border-color: #8fceb3; }
+  .c-orange { background: #fdebd6; border-color: #eab47a; }
+  .c-purple { background: #e9e2fa; border-color: #b4a0e6; }
+  .c-pink { background: #fbe1ea; border-color: #e7a0b9; }
+  .arch .ar { text-align: center; color: var(--navy); font-size: 14px; font-weight: 700; }
+
+  .setup li { font-size: 12px; margin-bottom: 5px; }
+
+  /* technologies */
+  .tech { display: grid; grid-template-columns: repeat(10, 1fr); gap: 6px; }
+  .tech div { text-align: center; font-size: 10.5px; line-height: 1.2; color: var(--ink2); }
+  .tech i { display: grid; place-items: center; width: 38px; height: 38px; margin: 0 auto 4px; border-radius: 9px; font-style: normal; font-weight: 700; font-size: 12px; color: #fff; }
+
+  /* results */
+  .results { display: grid; grid-template-columns: 1.22fr 1fr 1fr; gap: 8px; }
+  .results2 { display: grid; grid-template-columns: 1fr 0.95fr 1.05fr; gap: 8px; margin-top: 8px; }
+  .shot { width: 100%; border-radius: 4px; border: 1px solid #c9daf3; display: block; }
+  table { border-collapse: collapse; width: 100%; font-size: 11.5px; }
+  th, td { padding: 5px 4px; text-align: center; border-bottom: 1px solid #dbe5f4; }
+  th { background: #eef3fb; font-weight: 600; }
+  td:first-child, th:first-child { text-align: left; }
+  tr.hl td { background: #e3f4ea; font-weight: 700; }
+  .legend { display: flex; gap: 12px; justify-content: center; font-size: 10.5px; color: var(--ink2); margin-top: 2px; }
+  .legend span::before { content: ""; display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 4px; vertical-align: -1px; background: var(--c); }
+  svg text { font-family: Inter, sans-serif; }
+  .cm { display: grid; grid-template-columns: 54px 1fr 1fr; gap: 3px; font-size: 10.5px; text-align: center; }
+  .cm .cell { padding: 8px 2px; border-radius: 4px; font-weight: 700; font-size: 15px; }
+  .cm .lab { color: var(--ink2); align-self: center; }
+  .stats { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; margin-top: 8px; }
+  .stats div { background: var(--tint); border-radius: 6px; padding: 6px 4px; text-align: center; font-size: 10.5px; color: var(--ink2); line-height: 1.2; }
+  .stats b { display: block; font-size: 17px; color: var(--navy); white-space: nowrap; }
+
+  .bottom { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .footer { display: grid; grid-template-columns: 1.2fr 1fr 1fr; background: var(--tint); border: 2px solid var(--line); padding: 10px 16px; }
+  .footer > div + div { border-left: 1px solid var(--line); padding-left: 16px; }
+  .footer h2 { font-size: 19px; margin-bottom: 4px; }
+  .footer p { font-size: 12px; color: var(--ink2); }
+</style>
+</head>
+<body>
+
+<header class="inst">
+  <img src="logo.png" alt="Sri Ramachandra logo">
+  <div>
+    <div class="name">SRI RAMACHANDRA</div>
+    <div class="line2">INSTITUTE OF HIGHER EDUCATION AND RESEARCH</div>
+    <div class="line3">(Category - I Deemed to be University) Porur, Chennai</div>
+    <div class="line4">SRI RAMACHANDRA FACULTY OF ENGINEERING AND TECHNOLOGY</div>
+  </div>
+</header>
+
+<section class="title">
+  <h1>Multi-Agentic AI Assistant using<br>Retrieval-Augmented Generation</h1>
+  <div class="tag">AVENZA AI: A Source-Grounded Assistant with a Fine-tuned GPT-2 Answerability Model</div>
+  <div class="authors">Shri Niketh R (E0324071), Koyi Mohith (E0324076), Prof. Deena</div>
+  <div class="course">ADA23CL301 – Deep Learning Laboratory &nbsp;|&nbsp; October 2026</div>
+</section>
+
+<div class="main">
+  <!-- LEFT COLUMN -->
+  <div class="col">
+    <section class="panel">
+      <h2>Introduction</h2>
+      <p class="just">Large language models write fluent text but often invent facts, figures and dates. AVENZA AI is a full-stack assistant for finance and technology work that uses the language model only to <b>write</b>, while every <b>fact</b> comes from retrieved sources: the user's documents, saved memory, a recent-news index and live web search. Answers cite their sources as [1], [2], and twelve specialist agents handle code, math, finance, files, images, diagrams and voice.</p>
+    </section>
+
+    <section class="panel">
+      <h2>Problem Statement</h2>
+      <ul>
+        <li>LLMs hallucinate numbers and facts, which is unsafe for financial and technical decisions.</li>
+        <li>Users need answers grounded in their own files (PDF, Word, Excel, slides, scans) and in current data.</li>
+        <li>A system must know when the sources do <b>not</b> answer a question and say so instead of guessing.</li>
+      </ul>
+    </section>
+
+    <section class="panel" style="flex:1">
+      <h2>Methodology</h2>
+      <div class="steps">
+        <div class="step s1"><div class="n">1</div><div><b>Question Understanding</b><span>Fix typos and shorthand, resolve follow-ups, detect intent, entities and recency.</span></div></div>
+        <div class="arrow-down">▼</div>
+        <div class="step s2"><div class="n">2</div><div><b>Agent Routing</b><span>Router picks 1 of 12 specialist agents, each with its own instructions and retrieval policy.</span></div></div>
+        <div class="arrow-down">▼</div>
+        <div class="step s3"><div class="n">3</div><div><b>Parallel Retrieval + Reranking</b><span>Documents and memory (ChromaDB, nomic-embed-text), RSS news, web search; cross-encoder MiniLM-L12 drops off-topic passages.</span></div></div>
+        <div class="arrow-down">▼</div>
+        <div class="step s4"><div class="n">4</div><div><b>Grounded Generation</b><span>LLM writes from numbered sources only. Own GPT-2 (124M) fine-tuned to answer or refuse, with an answerability head.</span></div></div>
+        <div class="arrow-down">▼</div>
+        <div class="step s5"><div class="n">5</div><div><b>Verification &amp; Reporting</b><span>Figure check flags numbers absent from sources; classification report page with PDF export.</span></div></div>
+      </div>
+    </section>
+  </div>
+
+  <!-- RIGHT COLUMN -->
+  <div class="col">
+    <div class="toprow">
+      <section class="panel">
+        <h2>Architecture and Experimental Setup</h2>
+        <div class="arch">
+          <div class="box">
+            <div class="t">User Input</div>
+            <div class="chip c-blue">Text</div>
+            <div class="chip c-blue">Files / Scans</div>
+            <div class="chip c-blue">Images</div>
+            <div class="chip c-blue">Voice (Whisper)</div>
+          </div>
+          <div class="ar">→</div>
+          <div class="box">
+            <div class="t">Understand</div>
+            <div class="chip c-green">Query rewrite</div>
+            <div class="chip c-green">Agent router<br>(12 agents)</div>
+          </div>
+          <div class="ar">→</div>
+          <div class="box">
+            <div class="t">Retrieve</div>
+            <div class="chip c-orange">Docs + Memory<br>ChromaDB</div>
+            <div class="chip c-orange">News + Web</div>
+            <div class="chip c-orange">MiniLM-L12<br>reranker</div>
+          </div>
+          <div class="ar">→</div>
+          <div class="box">
+            <div class="t">Generate</div>
+            <div class="chip c-purple">LLM API<br>(streaming)</div>
+            <div class="chip c-purple">AVENZA GPT-2<br>int8 + gate</div>
+          </div>
+          <div class="ar">→</div>
+          <div class="box">
+            <div class="t">Output</div>
+            <div class="chip c-pink">Figure check</div>
+            <div class="chip c-pink">Cited answer</div>
+            <div class="chip c-pink">Diagram / Voice (Piper)</div>
+          </div>
+        </div>
+        <div class="fig"><b>Fig 1.</b> System architecture of AVENZA AI (Next.js web app on :3000, Flask backend on :5000).</div>
+      </section>
+
+      <section class="panel setup">
+        <h2 style="font-size:19px">Experimental Setup</h2>
+        <ul>
+          <li><b>Base model:</b> GPT-2, 124.4M parameters</li>
+          <li><b>Datasets:</b> SQuAD v2, Dolly-15k</li>
+          <li><b>Split:</b> 34,013 train · 1,992 val · 300 held-out test</li>
+          <li><b>Training:</b> 2 epochs, batch 16, LR 5e-5, max length 640</li>
+          <li><b>Hardware:</b> Tesla T4 (Colab), 59.2 min</li>
+          <li><b>Deployment:</b> CTranslate2 int8 on CPU</li>
+          <li><b>Metrics:</b> Accuracy, Precision, Recall, F1, ROC AUC</li>
+        </ul>
+      </section>
+    </div>
+
+    <section class="panel">
+      <h2>Technologies Used</h2>
+      <div class="tech">
+        <div><i style="background:#2b5b9c">Py</i>Python 3.13</div>
+        <div><i style="background:#c2410c">PT</i>PyTorch + Transformers</div>
+        <div><i style="background:#1f2937">N</i>Next.js 16 / React 19</div>
+        <div><i style="background:#334155">Fl</i>Flask</div>
+        <div><i style="background:#b45309">Ch</i>ChromaDB</div>
+        <div><i style="background:#0f766e">Ol</i>Ollama embeddings</div>
+        <div><i style="background:#4338ca">Ox</i>ONNX Runtime</div>
+        <div><i style="background:#7e22ce">C2</i>CTranslate2 int8</div>
+        <div><i style="background:#be123c">Wh</i>Whisper + Piper</div>
+        <div><i style="background:#ca8a04">Co</i>Google Colab (T4)</div>
+      </div>
+    </section>
+
+    <section class="panel" style="flex:1">
+      <h2>Results and Discussion</h2>
+      <div class="results">
+        <div class="sub">
+          <h3>Grounded Answer with Citations</h3>
+          <img class="shot" src="../screenshots/chat-sources.png" alt="AVENZA AI chat answer with cited sources">
+          <div class="fig"><b>Fig 2.</b> Finance analyst agent: question understood despite typos, web sources cited.</div>
+        </div>
+        <div class="sub">
+          <h3>Answerability Classifier</h3>
+          <table>
+            <tr><th>Metric</th><th>Colab val<br>(FP32)</th><th>Laptop test<br>(int8)</th></tr>
+            <tr><td>Examples</td><td>1,992</td><td>300</td></tr>
+            <tr><td>Accuracy</td><td>0.735</td><td>0.740</td></tr>
+            <tr><td>Macro P</td><td>0.735</td><td>0.738</td></tr>
+            <tr><td>Macro R</td><td>0.738</td><td>0.740</td></tr>
+            <tr><td>Macro F1</td><td>0.735</td><td>0.739</td></tr>
+            <tr class="hl"><td>ROC AUC</td><td>0.815</td><td>0.831</td></tr>
+          </table>
+          <div class="fig"><b>Fig 3.</b> int8 quantisation keeps accuracy (threshold 0.68).</div>
+        </div>
+        <div class="sub">
+          <h3>Training Loss (Colab, T4)</h3>
+          <svg id="loss" viewBox="0 0 250 165" width="100%"></svg>
+          <div class="legend"><span style="--c:var(--blue)">LM loss</span><span style="--c:var(--orange)">Classifier loss</span></div>
+          <div class="fig"><b>Fig 4.</b> Val perplexity 1.137 after 2 epochs.</div>
+        </div>
+      </div>
+      <div class="results2">
+        <div class="sub">
+          <h3>Per-class Scores (Validation)</h3>
+          <svg id="bars" viewBox="0 0 250 150" width="100%"></svg>
+          <div class="legend"><span style="--c:var(--blue)">Unanswerable (1,100)</span><span style="--c:var(--orange)">Answerable (892)</span></div>
+          <div class="fig"><b>Fig 5.</b> Balanced performance across both classes.</div>
+        </div>
+        <div class="sub">
+          <h3>Confusion Matrix (Test, int8)</h3>
+          <div class="cm">
+            <div></div><div class="lab">Pred: Unans.</div><div class="lab">Pred: Ans.</div>
+            <div class="lab">True: Unans.</div><div class="cell" style="background:#2563c9;color:#fff">122</div><div class="cell" style="background:#dbe7fa">43</div>
+            <div class="lab">True: Ans.</div><div class="cell" style="background:#d2e1f8">35</div><div class="cell" style="background:#3f78d4;color:#fff">100</div>
+          </div>
+          <div class="stats">
+            <div><b>77%</b>answered when answerable</div>
+            <div><b>73%</b>refused when not</div>
+            <div><b>0.6 s</b>per answer on CPU</div>
+          </div>
+        </div>
+        <div class="sub">
+          <h3>Key Findings</h3>
+          <ul>
+            <li>Fine-tuned GPT-2 detects unanswerable questions with <b>ROC AUC 0.83</b> and 74% accuracy on held-out data.</li>
+            <li>int8 CTranslate2 runs about <b>50× faster</b> than the NumPy engine, with no accuracy loss.</li>
+            <li>The full pipeline refuses 73% of unanswerable questions instead of guessing.</li>
+            <li>Every answer cites sources; a figure check flags any number not found in them.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+  </div>
+</div>
+
+<div class="bottom">
+  <section class="panel">
+    <h2>Limitations and Future Work</h2>
+    <ul>
+      <li>GPT-2 (124M) gives short answers; long, detailed replies still use an external LLM API.</li>
+      <li>About 1 in 4 answerability decisions is wrong; more data or gpt2-medium should help.</li>
+      <li>Live web search adds 2–5 s per question; English only for now.</li>
+      <li>Future work: larger training set, code model, Wikipedia source and Indian-language translation.</li>
+    </ul>
+  </section>
+  <section class="panel">
+    <h2>Conclusion</h2>
+    <p class="just">AVENZA AI shows that retrieval, reranking and a fine-tuned answerability model make an assistant that answers from evidence, cites it, and admits when it does not know. Our own GPT-2, trained on SQuAD v2 and Dolly-15k, runs locally in int8 at 0.6 s per answer with ROC AUC 0.83, and the multi-agent design extends the same grounding to files, images, diagrams and voice.</p>
+  </section>
+</div>
+
+<footer class="footer">
+  <div><h2>Team Members</h2><p>Shri Niketh R (E0324071) &nbsp;|&nbsp; Koyi Mohith (E0324076) &nbsp;|&nbsp; Prof. Deena</p></div>
+  <div><h2>Guide</h2><p><b style="color:var(--ink);font-size:14px">Prof. AV Geetha</b><br>Sri Ramachandra Faculty of Engineering and Technology, SRIHER</p></div>
+  <div><h2>Department</h2><p>Computer Science and Engineering<br>Sri Ramachandra Faculty of Engineering and Technology</p></div>
+</footer>
+
+<script>
+  const NS = "http://www.w3.org/2000/svg";
+  const el = (tag, attrs, parent, text) => {
+    const e = document.createElementNS(NS, tag);
+    for (const k in attrs) e.setAttribute(k, attrs[k]);
+    if (text != null) e.textContent = text;
+    parent.appendChild(e);
+    return e;
+  };
+  const BLUE = "#2563c9", ORANGE = "#e07b1a", GRID = "#e3e9f3", AXIS = "#6b7690";
+
+  // Fig 4: training loss history from report.json
+  (() => {
+    const steps = [50, 100, 195, 245, 295, 345, 395, 445, 495, 545, 595, 645, 695, 745, 795, 845, 895, 945, 995, 1045];
+    const lm = [0.284, 0.363, 0.393, 0.271, 0.335, 0.306, 0.395, 0.367, 0.356, 0.409, 0.266, 0.282, 0.278, 0.326, 0.363, 0.361, 0.324, 0.328, 0.358, 0.299];
+    const cls = [0.231, 0.262, 0.345, 0.276, 0.300, 0.236, 0.254, 0.239, 0.287, 0.267, 0.306, 0.259, 0.271, 0.256, 0.243, 0.276, 0.224, 0.290, 0.233, 0.245];
+    const svg = document.getElementById("loss");
+    const L = 30, R = 242, T = 8, B = 140, ymax = 0.5;
+    const x = s => L + (s - 0) / 1100 * (R - L), y = v => B - v / ymax * (B - T);
+    for (const v of [0, 0.1, 0.2, 0.3, 0.4, 0.5]) {
+      el("line", { x1: L, x2: R, y1: y(v), y2: y(v), stroke: GRID, "stroke-width": 1 }, svg);
+      el("text", { x: L - 4, y: y(v) + 3, "text-anchor": "end", "font-size": 8, fill: AXIS }, svg, v.toFixed(1));
+    }
+    for (const s of [0, 250, 500, 750, 1000]) el("text", { x: x(s), y: B + 11, "text-anchor": "middle", "font-size": 8, fill: AXIS }, svg, s);
+    el("text", { x: (L + R) / 2, y: B + 22, "text-anchor": "middle", "font-size": 8, fill: AXIS }, svg, "Training step");
+    for (const [data, c] of [[lm, BLUE], [cls, ORANGE]]) {
+      el("polyline", { points: data.map((v, i) => `${x(steps[i])},${y(v)}`).join(" "), fill: "none", stroke: c, "stroke-width": 2, "stroke-linejoin": "round" }, svg);
+    }
+  })();
+
+  // Fig 5: per-class precision / recall / F1 on the validation set
+  (() => {
+    const groups = ["Precision", "Recall", "F1-score"];
+    const unans = [0.785, 0.717, 0.750], ans = [0.685, 0.758, 0.720];
+    const svg = document.getElementById("bars");
+    const L = 28, R = 245, T = 14, B = 128, ymin = 0.5, ymax = 0.9;
+    const y = v => B - (v - ymin) / (ymax - ymin) * (B - T);
+    for (const v of [0.5, 0.6, 0.7, 0.8, 0.9]) {
+      el("line", { x1: L, x2: R, y1: y(v), y2: y(v), stroke: GRID, "stroke-width": 1 }, svg);
+      el("text", { x: L - 4, y: y(v) + 3, "text-anchor": "end", "font-size": 8, fill: AXIS }, svg, v.toFixed(1));
+    }
+    const gw = (R - L) / groups.length, bw = 24;
+    groups.forEach((g, i) => {
+      const cx = L + gw * i + gw / 2;
+      [[unans[i], BLUE, cx - bw - 1], [ans[i], ORANGE, cx + 1]].forEach(([v, c, bx]) => {
+        const h = B - y(v);
+        el("path", { d: `M${bx},${B} V${y(v) + 3} q0,-3 3,-3 h${bw - 6} q3,0 3,3 V${B} Z`, fill: c }, svg);
+        el("text", { x: bx + bw / 2, y: y(v) - 3, "text-anchor": "middle", "font-size": 8, "font-weight": 600, fill: "#1b2333" }, svg, v.toFixed(2));
+      });
+      el("text", { x: cx, y: B + 11, "text-anchor": "middle", "font-size": 8.5, fill: AXIS }, svg, g);
+    });
+  })();
+</script>
+</body>
+</html>

@@ -6,6 +6,7 @@ const speakSchema = z.object({
   text: z.string().min(1).max(4000),
   voice: z.string().max(80).optional(),
   speed: z.number().min(0.6).max(1.8).optional(),
+  language: z.string().max(16).optional(),
 });
 
 /** Text -> local Piper speech (WAV). */

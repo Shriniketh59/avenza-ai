@@ -1,3 +1,5 @@
+import type { ModelId } from "@/config/features";
+
 export type MessageRole = "user" | "assistant" | "system";
 
 export type MessageStatus = "pending" | "streaming" | "complete" | "stopped" | "error";
@@ -20,7 +22,7 @@ export interface AttachmentMeta {
 
 export interface Source {
   index: number;
-  kind?: "document" | "news" | "web";
+  kind?: "document" | "news" | "web" | "image" | "plugin";
   title?: string | null;
   url?: string | null;
   filename: string;
@@ -57,6 +59,8 @@ export interface ChatMessage {
   /** Attached images as small JPEG data URLs (thumbnails; full size is kept in memory for the model). */
   images?: string[];
   sources?: Source[];
+  /** Language code the reply is written in ("ta" for a Tamil translation), when known: picks the voice that reads it. */
+  language?: string;
 }
 
 /** Payload the frontend sends to POST /api/chat (forwarded to Flask). */
@@ -64,9 +68,13 @@ export interface ChatRequest {
   conversationId: string;
   messages: Pick<ChatMessage, "role" | "content">[];
   agentId?: string;
+  /** User skill to apply; omitted = AVENZA matches one by name, if any. */
+  skillId?: string;
   memory?: boolean;
   webSearch?: boolean;
-  mode?: "fast" | "accurate";
+  mode?: ModelId;
+  /** Language name to reply in ("Hindi"), or "auto" for the language of the message. */
+  language?: string;
   /** Spoken conversation: ask for short, speakable answers. */
   voice?: boolean;
   /** Images for the vision model (JPEG data URLs) from the latest message that has them. */
@@ -85,5 +93,6 @@ export type ChatStreamEvent =
   | { type: "token"; value: string }
   | { type: "tool"; tool: ToolCall }
   | { type: "sources"; sources: Source[] }
+  | { type: "language"; code: string }
   | { type: "done" }
   | { type: "error"; message: string };

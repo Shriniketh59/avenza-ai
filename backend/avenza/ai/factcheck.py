@@ -3,6 +3,8 @@ import re
 from datetime import datetime
 
 _CODE = re.compile(r"```.*?```|`[^`\n]*`", re.S)
+# LaTeX math, \( inline \) or \[ display \] (or $$...$$): checked like code, its worked results count as derived.
+_MATH = re.compile(r"\\\((.*?)\\\)|\\\[(.*?)\\\]|\$\$(.*?)\$\$", re.S)
 _CITATION = re.compile(r"\[\d+(?:\s*[,–-]\s*\d+)*\]")
 _LIST_NUMBER = re.compile(r"^\s*\d+[.)]\s", re.M)
 _URL = re.compile(r"https?://\S+")
@@ -13,7 +15,7 @@ _NUMBER = re.compile(r"(?<![\w.])[$₹€£]?\s?\d[\d,]*(?:\.\d+)?\s?%?")
 
 def _values(text: str) -> set[float]:
     out = set()
-    for m in _NUMBER.finditer(text):
+    for m in _NUMBER.finditer(text.replace("{,}", ",")):  # LaTeX thousands separator: 40{,}000
         raw = re.sub(r"[^\d.]", "", m.group())
         try:
             out.add(round(float(raw), 6))
@@ -25,19 +27,23 @@ def _values(text: str) -> set[float]:
 def unsupported_figures(answer: str, evidence: list[str]) -> list[str]:
     """Figures in the answer that appear in none of the evidence texts (sources, memory, question, today's date).
 
-    Small counts (below 10) are ignored; they are usually list sizes or ordinals, not facts.
+    Small counts (below 10) are ignored; they are usually list sizes or ordinals, not facts. So are plain historical
+    years (more than 10 years ago): those are textbook knowledge, which the answer may state without a source.
+    Recent years and every other figure are still checked.
     """
     now = datetime.now()
     known = _values(" ".join(evidence)) | {float(now.year), float(now.day), float(now.month)}
     # Arithmetic the answer shows (`120 × 1.08 = 129.6`) is checkable on screen: its results are derived, not
     # claimed from nowhere, so they count as known and the working itself is not scanned.
-    worked = [a or b for a, b in _WORKED.findall(answer)]
+    worked = [m for groups in _MATH.findall(answer) for m in groups if "=" in m]
+    plain = _MATH.sub(" ", answer)
+    worked += [a or b for a, b in _WORKED.findall(plain)]
     known |= _values(" ".join(w.rsplit("=", 1)[1] for w in worked))
-    body = _WORKED.sub(" ", answer)
+    body = _WORKED.sub(" ", plain)
     body = _URL.sub(" ", _LIST_NUMBER.sub(" ", _CITATION.sub(" ", _CODE.sub(" ", body))))
-    flagged = []
+    flagged, seen = [], set()
     for m in _NUMBER.finditer(body):
-        shown = m.group().strip()
+        shown = m.group().strip().rstrip(",")  # "1857," at the end of a list item is the year 1857
         raw = re.sub(r"[^\d.]", "", shown).rstrip(".")
         try:
             value = round(float(raw), 6)
@@ -45,7 +51,10 @@ def unsupported_figures(answer: str, evidence: list[str]) -> list[str]:
             continue
         if value < 10 and "." not in raw and "%" not in shown:
             continue
-        if value not in known and shown not in flagged:
+        if re.fullmatch(r"1\d{3}|20\d{2}", shown) and value <= now.year - 10:
+            continue
+        if value not in known and value not in seen:
+            seen.add(value)
             flagged.append(shown)
     return flagged
 

@@ -32,7 +32,7 @@ def instant(question: str, *, memorable: bool, use_memory: bool) -> str | None:
         return "Got it. I'll remember that." if use_memory else "Noted. Memory is turned off, so I won't keep it after this chat."
     if _THANKS.match(q):
         return "You're welcome."
-    if GREETINGS.match(q):
+    if GREETINGS.match(q) and not re.search(r"\b(who|what|how)\b", q, re.I):
         return "Hello! What would you like to know?"
     now = datetime.now().astimezone()
     if _TIME.search(q):
@@ -51,7 +51,7 @@ def reply(question: str, query: str, analysis, items: list[dict], memories: list
         return "Got it. I'll remember that." if use_memory else "Noted. Memory is turned off, so I won't keep it after this chat."
     if _THANKS.match(q):
         return "You're welcome."
-    if GREETINGS.match(q):
+    if GREETINGS.match(q) and not re.search(r"\b(who|what|how)\b", q, re.I):
         return "Hello! Ask me about your documents, the markets or the latest news."
     if _IDENTITY.search(q):
         return ("I'm AVENZA AI. By voice I answer straight from your documents, your saved memory, "

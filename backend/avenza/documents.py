@@ -64,9 +64,16 @@ def upload():
         "VALUES (?, ?, ?, ?, ?, ?, 0, 'indexing')",
         (doc_id, g.user["id"], file.filename, file.mimetype, len(data), len(chunks)),
     )
+    # The text itself, kept in SQLite: keyword search and attached-file reading work at once, even before (or
+    # without) the embeddings, which the API's rate limit can delay or stop.
+    pages = chunk_pages(chunks)
+    db.executemany(
+        "INSERT INTO doc_chunks (document_id, user_id, idx, text, page) VALUES (?, ?, ?, ?, ?)",
+        [(doc_id, g.user["id"], i, c, pages[i] if pages else None) for i, c in enumerate(chunks)],
+    )
     db.commit()
     # Embedding is the slow part (~0.25 s per passage on CPU): do it in the background.
-    indexer.submit(current_app._get_current_object(), indexer.Job(g.user["id"], doc_id, file.filename, chunks, chunk_pages(chunks)))
+    indexer.submit(current_app._get_current_object(), indexer.Job(g.user["id"], doc_id, file.filename, chunks, pages))
     return jsonify(document=_doc_json(db.execute("SELECT * FROM documents WHERE id = ?", (doc_id,)).fetchone())), 202
 
 
