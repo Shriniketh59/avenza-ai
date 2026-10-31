@@ -206,6 +206,13 @@ It needs JDK 17+ and the Android SDK (`platforms;android-35`, `build-tools;35.0.
 
 ---
 
+## Tamil voice
+
+Piper has no Tamil voice, so Tamil is read by Meta's MMS-TTS Tamil voice, converted to ONNX once into
+`backend/instance/voices/mms-ta/` (`backend/tools/export_mms_voice.py tam backend/instance/voices/mms-ta`; see the
+script for the throwaway environment it needs). The same works for other MMS languages, e.g. `kan` (Kannada) into
+`mms-kn`. MMS voices are licensed **CC-BY-NC-4.0: non-commercial use only**.
+
 ## Linux desktop app
 
 ```bash

@@ -179,6 +179,7 @@ const SAMPLES: Record<string, string> = {
   ko: "안녕하세요, 저는 AVENZA AI입니다. 제 목소리는 이렇습니다.",
   tr: "Merhaba, ben AVENZA AI. Sesim böyle.",
   te: "నమస్కారం, నేను AVENZA AI. నా గొంతు ఇలా ఉంటుంది.",
+  ta: "வணக்கம், நான் AVENZA AI. என் குரல் இப்படித்தான் இருக்கும்.",
   ml: "നമസ്കാരം, ഞാൻ AVENZA AI ആണ്. എന്റെ ശബ്ദം ഇങ്ങനെയാണ്.",
   mr: "नमस्कार, मी AVENZA AI आहे. माझा आवाज असा आहे.",
   bn: "নমস্কার, আমি AVENZA AI। আমার কণ্ঠ এমন।",
@@ -259,7 +260,7 @@ function VoiceTab() {
       </SettingsSection>
       <SettingsSection
         title="Voice for each language"
-        description="Each reply, translation and read-aloud uses the voice of its own language. Pick one per language, or leave Automatic. Languages with no voice here (like Tamil or Kannada) use your device's own voice; install more in the Voice library below."
+        description="Each reply, translation and read-aloud uses the voice of its own language. Pick one per language, or leave Automatic. Languages with no voice here (like Kannada or Gujarati) use your device's own voice; install more in the Voice library below."
       >
         {voices.length === 0 && <p className="text-sm text-muted">No voices installed.</p>}
         {[...groups].map(([lang, list]) => (

@@ -122,7 +122,14 @@ def available_voices() -> list[dict]:
         out.append({"id": f.stem, "language": code.replace("_", "-"), "name": name.replace("_", " ").title(),
                     "quality": quality, "languageName": lang.get("name_english") or code,
                     "nativeName": lang.get("name_native") or "", "country": lang.get("country_english") or ""})
-    return out
+    from . import mms
+
+    return out + mms.installed(_voices_dir())
+
+
+def _family(voice_id: str) -> str:
+    """Language of a voice id: "hi_IN-rohan-medium" -> "hi", "mms-ta" -> "ta"."""
+    return voice_id.removeprefix("mms-") if voice_id.startswith("mms-") else voice_id.split("_")[0]
 
 
 # --- Voice catalog and installs -------------------------------------------------------------------------------
@@ -286,14 +293,14 @@ def voice_for(text: str, voice_id: str | None, language: str | None, by_language
     picked = voice_id if voice_id and voice_id != "auto" and voice_id in installed else None
     fams = _families(text, language)
     if not fams:
-        fams = [_latin_language(text, {v.split("_")[0] for v in installed})]
+        fams = [_latin_language(text, {_family(v) for v in installed})]
     chosen = {str(k).lower(): str(v) for k, v in (by_language or {}).items()}
     for fam in fams:
         if chosen.get(fam) in installed:
             return chosen[fam]
-        if picked and picked.split("_")[0] == fam:
+        if picked and _family(picked) == fam:
             return picked
-        matches = [v for v in installed if v.split("_")[0] == fam]
+        matches = [v for v in installed if _family(v) == fam]
         if matches:
             return default if default in matches else matches[0]
     if fams[0] != "en":
@@ -321,8 +328,11 @@ def synthesize(text: str, voice_id: str | None = None, speed: float = 1.0, langu
     whose script does not show its language; by_language maps a language to the user's voice for it."""
     from piper import SynthesisConfig
 
-    voice = _voice(voice_for(text, voice_id, language, by_language))
+    chosen = voice_for(text, voice_id, language, by_language)
     speed = min(max(speed, 0.6), 1.8)
+    if chosen.startswith("mms-"):
+        return _louder(_mms_wav(chosen, text, speed), current_app.config["VOICE_BOOST"])
+    voice = _voice(chosen)
     buf = io.BytesIO()
     try:
         with wave.open(buf, "wb") as wav:
@@ -331,6 +341,27 @@ def synthesize(text: str, voice_id: str | None = None, speed: float = 1.0, langu
         current_app.logger.warning("speech synthesis failed: %s", exc)
         raise SpeechError("This voice could not read the text.") from exc
     return _louder(buf.getvalue(), current_app.config["VOICE_BOOST"])
+
+
+def _mms_wav(voice_id: str, text: str, speed: float) -> bytes:
+    import numpy as np
+
+    from . import mms
+
+    try:
+        wave_data, rate = mms.synthesize(_voices_dir() / voice_id, text, speed)
+    except Exception as exc:
+        current_app.logger.warning("MMS synthesis failed: %s", exc)
+        raise SpeechError("This voice could not read the text.") from exc
+    if not wave_data.size:
+        raise SpeechError("Nothing this voice can read in the text.")
+    buf = io.BytesIO()
+    with wave.open(buf, "wb") as wav:
+        wav.setnchannels(1)
+        wav.setsampwidth(2)
+        wav.setframerate(rate)
+        wav.writeframes((np.clip(wave_data, -1, 1) * 32767).astype(np.int16).tobytes())
+    return buf.getvalue()
 
 
 def _louder(wav_bytes: bytes, boost: float) -> bytes:
