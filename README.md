@@ -23,6 +23,7 @@ Every answer is built from real sources (your documents, saved memory, recent ne
 - [How answers stay accurate](#how-answers-stay-accurate)
 - [Using AVENZA](#using-avenza)
 - [Android app](#android-app)
+- [Linux desktop app](#linux-desktop-app)
 - [Configuration](#configuration)
 - [Manual setup](#manual-setup)
 - [Troubleshooting](#troubleshooting)
@@ -202,6 +203,16 @@ It needs JDK 17+ and the Android SDK (`platforms;android-35`, `build-tools;35.0.
 - **Over USB** (USB debugging on): `--install` runs `adb reverse tcp:3000 tcp:3000`, so the phone's `http://localhost:3000` reaches AVENZA. Run `adb reverse tcp:3000 tcp:3000` again after reconnecting the cable.
 - **Over Wi-Fi or mobile data**: start an https tunnel (`cloudflared tunnel --url http://localhost:3000`) and enter its link on the app's *Connect* screen. The camera and microphone need https or localhost.
 - To change the server later, press Back on the home screen and choose *Change server address*.
+
+---
+
+## Linux desktop app
+
+```bash
+desktop/install.sh   # adds "AVENZA AI" to the app menu and the desktop
+```
+
+Opening it starts AVENZA if it is not running (logs in `~/.cache/avenza-ai/server.log`) and shows it in its own Chrome app window (Chromium, Edge or Brave also work), with the microphone and camera allowed on localhost. Right-click the app for **Stop AVENZA**. It uses Node 20+ from nvm when the system Node is older.
 
 ---
 
