@@ -29,11 +29,16 @@ def transcribe():
 @require_auth
 def speak():
     data = request.get_json(silent=True) or {}
-    text = voice_nlp.speakable(str(data.get("text", "")))[:1500]
+    language = str(data.get("language") or "") or None
+    text = voice_nlp.speakable(str(data.get("text", "")), language)[:1500]
     if len(text) < 2:
         return jsonify(error="Nothing to say."), 400
+    by_language = data.get("voices") if isinstance(data.get("voices"), dict) else None
     try:
-        wav = speech.synthesize(text, data.get("voice"), float(data.get("speed", 1.0)), data.get("language"))
+        wav = speech.synthesize(text, data.get("voice"), float(data.get("speed", 1.0)), language, by_language)
+    except speech.NoVoice as exc:
+        # The app then reads it with the device's own voice for that language.
+        return jsonify(error=str(exc), code="NO_VOICE", language=exc.family), 422
     except speech.SpeechError as exc:
         return jsonify(error=str(exc)), 503
     return Response(wav, mimetype="audio/wav", headers={"Cache-Control": "no-store"})

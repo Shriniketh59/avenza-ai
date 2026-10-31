@@ -1,10 +1,15 @@
 "use client";
 
-import { AlertTriangle, Check, Copy, FileText, RotateCcw, ThumbsDown, ThumbsUp } from "lucide-react";
+import { AlertTriangle, Check, Copy, FileText, RotateCcw, Square, ThumbsDown, ThumbsUp, Volume2 } from "lucide-react";
 import { memo, useState } from "react";
+import { usePreferences } from "@/hooks/use-preferences";
+import { useSpeechPlayer } from "@/hooks/use-speech-player";
 import { useSmoothText } from "@/hooks/use-smooth-text";
+import { isPreviewMode } from "@/lib/api-client";
+import { unlockAudio } from "@/lib/audio-unlock";
 import { stripCitations } from "@/lib/citations";
 import { cn, formatBytes } from "@/lib/utils";
+import { takeSentences } from "@/lib/voice-api";
 import type { ChatMessage as Message, Feedback } from "@/types/chat";
 import { LogoMark } from "./logo";
 import { Markdown } from "./chat/markdown";
@@ -90,6 +95,7 @@ export const ChatMessage = memo(function ChatMessage({ message, isLast, canRegen
         {(done || message.status === "error") && (
           <div className={cn("mt-2 flex items-center gap-0.5 text-muted", !isLast && "opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100")}>
             {message.content && <CopyButton text={stripCitations(message.content)} />}
+            {done && message.content && <ReadAloudButton text={message.content} language={message.language} />}
             {done && (
               <>
                 <ActionButton label="Good response" pressed={message.feedback === "up"} onClick={() => onFeedback(message.feedback === "up" ? null : "up")}>
@@ -148,6 +154,26 @@ function ActionButton({ label, pressed, onClick, children }: { label: string; pr
     >
       {children}
     </button>
+  );
+}
+
+/** Reads the answer aloud with a voice of its language (a Tamil translation in a Tamil voice). */
+function ReadAloudButton({ text, language }: { text: string; language?: string }) {
+  const [prefs] = usePreferences();
+  const player = useSpeechPlayer({ voice: prefs.ttsVoice, voices: prefs.ttsVoices, speed: prefs.ttsSpeed, language });
+  if (isPreviewMode()) return null;
+  return (
+    <ActionButton
+      label={player.speaking ? "Stop reading" : "Read aloud"}
+      pressed={player.speaking}
+      onClick={() => {
+        if (player.isBusy()) return player.stop();
+        unlockAudio();
+        takeSentences(text, true)[0].forEach(player.enqueue);
+      }}
+    >
+      {player.speaking ? <Square /> : <Volume2 />}
+    </ActionButton>
   );
 }
 

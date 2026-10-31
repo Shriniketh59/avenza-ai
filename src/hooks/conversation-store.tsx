@@ -180,6 +180,7 @@ export function ConversationProvider({ userId, children }: { userId: string; chi
         if (event.type === "token") patch((m) => ({ content: m.content + event.value, status: "streaming" }));
         else if (event.type === "tool") patch((m) => ({ toolCalls: upsertTool(m.toolCalls, event.tool) }));
         else if (event.type === "sources") patch(() => ({ sources: event.sources }));
+        else if (event.type === "language") patch(() => ({ language: event.code }));
         else if (event.type === "error") throw new ApiError(event.message, 500);
         else if (event.type === "done") break;
       }

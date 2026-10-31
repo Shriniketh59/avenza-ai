@@ -13,6 +13,8 @@ export interface Preferences {
   replyLanguage: string;
   /** Piper voice id; "" = automatic (a voice of the reply's language, else the server default). */
   ttsVoice: string;
+  /** The voice for each language ("hi" -> "hi_IN-rohan-medium"); a language not listed uses any installed voice of it. */
+  ttsVoices: Record<string, string>;
   ttsSpeed: number;
   autoSendVoice: boolean;
   memoryEnabled: boolean;
@@ -33,6 +35,7 @@ const DEFAULTS: Preferences = {
   speechLanguage: "auto",
   replyLanguage: "auto",
   ttsVoice: "",
+  ttsVoices: {},
   ttsSpeed: 1,
   autoSendVoice: false,
   memoryEnabled: true,
@@ -52,6 +55,10 @@ function read(): Preferences {
     // Saved before the models were named: "fast" / "accurate".
     const legacy = { fast: "flash", accurate: "plus" } as Record<string, ModelId>;
     cache!.mode = legacy[cache!.mode] ?? (cache!.mode === "plus" ? "plus" : "flash");
+    // One voice picked before voices were per language: it becomes the voice for its own language.
+    if (cache!.ttsVoice && !cache!.ttsVoices[cache!.ttsVoice.split("_")[0]]) {
+      cache!.ttsVoices = { ...cache!.ttsVoices, [cache!.ttsVoice.split("_")[0]]: cache!.ttsVoice };
+    }
   } catch {
     cache = DEFAULTS;
   }

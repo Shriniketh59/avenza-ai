@@ -79,8 +79,9 @@ def _scale(s: str | None) -> str:
     return {"bn": "billion", "billion": "billion", "m": "million", "million": "million", "k": "thousand"}.get((s or "").lower(), "")
 
 
-def speakable(markdown: str) -> str:
-    """Turn a Markdown reply into text that sounds natural when read aloud."""
+def speakable(markdown: str, language: str | None = None) -> str:
+    """Turn a Markdown reply into text that sounds natural when read aloud. The English wording of symbols
+    ("percent", "rupees") is only added to English text: another language's voice reads the symbols itself."""
     t = re.sub(r"```.*?```", " (code shown on screen) ", markdown, flags=re.S)
     t = re.sub(r"`([^`]+)`", r"\1", t)
     t = re.sub(r"\\[()\[\]]|\${2}", " ", t)  # LaTeX math delimiters (the voice prompt asks for words, this is a backstop)
@@ -98,7 +99,8 @@ def speakable(markdown: str) -> str:
     t = re.sub(r"^\s*[-*+]\s+", "", t, flags=re.M)
     t = re.sub(r"^\s*\d+\.\s+", "", t, flags=re.M)
     t = re.sub(r"[*_~>#]+", "", t)
-    for pattern, repl in _UNITS:
+    english = (language or "en").split("-")[0] == "en" and not re.search(r"[^\x00-\x7f₹€£]", t)
+    for pattern, repl in _UNITS if english else ():
         t = pattern.sub(repl, t)
     t = re.sub(r"\s*\n\s*", ". ", t)
     t = re.sub(r"\.\s*\.", ".", t)

@@ -59,6 +59,8 @@ export interface ChatMessage {
   /** Attached images as small JPEG data URLs (thumbnails; full size is kept in memory for the model). */
   images?: string[];
   sources?: Source[];
+  /** Language code the reply is written in ("ta" for a Tamil translation), when known: picks the voice that reads it. */
+  language?: string;
 }
 
 /** Payload the frontend sends to POST /api/chat (forwarded to Flask). */
@@ -91,5 +93,6 @@ export type ChatStreamEvent =
   | { type: "token"; value: string }
   | { type: "tool"; tool: ToolCall }
   | { type: "sources"; sources: Source[] }
+  | { type: "language"; code: string }
   | { type: "done" }
   | { type: "error"; message: string };

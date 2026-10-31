@@ -75,10 +75,14 @@ export function VoiceMode({ onClose }: { onClose: () => void }) {
     prefsRef.current = prefs;
   });
 
+  const lastReply = store.active?.messages.at(-1);
+  const replyLanguage = lastReply?.role === "assistant" ? lastReply.language : undefined;
   const player = useSpeechPlayer({
     voice: prefs.ttsVoice,
     speed: prefs.ttsSpeed,
-    language: prefs.replyLanguage !== "auto" ? prefs.replyLanguage : heardLanguage,
+    voices: prefs.ttsVoices,
+    // The reply's own language (a translation is read by a voice of its language), else Settings, else what was heard.
+    language: replyLanguage ?? (prefs.replyLanguage !== "auto" ? prefs.replyLanguage : heardLanguage),
     onIdle: () => {
       // Resume listening once the answer has been fully spoken.
       if (active.current && (!turn.current || turn.current.done)) listenRef.current();

@@ -217,7 +217,8 @@ def remove_voice(voice_id: str) -> None:
 # Writing systems that point to one language family (first is the likeliest; Devanagari is Hindi before Marathi).
 _SCRIPTS = [
     (r"[\u0900-\u097f]", ["hi", "mr", "ne"]), (r"[\u0980-\u09ff]", ["bn"]), (r"[\u0c00-\u0c7f]", ["te"]),
-    (r"[\u0d00-\u0d7f]", ["ml"]), (r"[\u0600-\u06ff]", ["ar", "fa", "ur"]), (r"[\u0590-\u05ff]", ["he"]),
+    (r"[\u0d00-\u0d7f]", ["ml"]), (r"[\u0b80-\u0bff]", ["ta"]), (r"[\u0c80-\u0cff]", ["kn"]),
+    (r"[\u0a80-\u0aff]", ["gu"]), (r"[\u0a00-\u0a7f]", ["pa"]), (r"[\u0b00-\u0b7f]", ["or"]), (r"[\u0600-\u06ff]", ["ar", "fa", "ur"]), (r"[\u0590-\u05ff]", ["he"]),
     (r"[\u0400-\u04ff]", ["ru", "uk", "bg", "sr", "kk"]), (r"[\u0370-\u03ff]", ["el"]), (r"[\u0e00-\u0e7f]", ["th"]),
     (r"[\uac00-\ud7af]", ["ko"]), (r"[\u3040-\u30ff]", ["ja"]), (r"[\u4e00-\u9fff]", ["zh", "ja"]),
     (r"[\u10a0-\u10ff]", ["ka"]), (r"[\u0530-\u058f]", ["hy"]),
@@ -244,21 +245,59 @@ def _families(text: str, language: str | None) -> list[str]:
     return out
 
 
-def voice_for(text: str, voice_id: str | None, language: str | None) -> str:
-    """The voice to speak this text with. A voice picked in Settings is kept when it speaks the text's
-    language (or no language is known); otherwise an installed voice of that language is used."""
+class NoVoice(SpeechError):
+    """The text's language is known but no installed voice speaks it (the browser's own voice is used instead)."""
+
+    def __init__(self, family: str):
+        super().__init__(f"No voice is installed for this language ({family}). Install one in Settings, Voice library.")
+        self.family = family
+
+
+_langid = None
+
+
+def _latin_language(text: str, families: set[str]) -> str:
+    """Language of Latin-script text, among the installed voices' languages. English unless clearly another:
+    short or mixed sentences are often misread, and an English voice reading English is the safe default."""
+    global _langid
+    from . import languages
+
+    if languages.is_english(text) or len(text) < 15:
+        return "en"
+    candidates = sorted(families - _NON_LATIN | {"en"})
+    if len(candidates) < 2:
+        return "en"
+    with _lock:
+        if _langid is None:
+            from langid.langid import LanguageIdentifier, model
+
+            _langid = LanguageIdentifier.from_modelstring(model, norm_probs=True)
+        _langid.set_languages(candidates)
+        lang, prob = _langid.classify(text)
+    return lang if prob >= 0.9 else "en"
+
+
+def voice_for(text: str, voice_id: str | None, language: str | None, by_language: dict | None = None) -> str:
+    """The voice to speak this text with: the text's language from its script, the language the app sends, or
+    detection; then the user's voice for that language (Settings), else an installed voice of it. Raises NoVoice
+    when the language is known and no voice speaks it, rather than an English voice garbling it."""
     installed = [v["id"] for v in available_voices()]
     default = current_app.config["DEFAULT_VOICE"]
     picked = voice_id if voice_id and voice_id != "auto" and voice_id in installed else None
     fams = _families(text, language)
     if not fams:
-        return picked or default
-    if picked and picked.split("_")[0] in fams:
-        return picked
+        fams = [_latin_language(text, {v.split("_")[0] for v in installed})]
+    chosen = {str(k).lower(): str(v) for k, v in (by_language or {}).items()}
     for fam in fams:
+        if chosen.get(fam) in installed:
+            return chosen[fam]
+        if picked and picked.split("_")[0] == fam:
+            return picked
         matches = [v for v in installed if v.split("_")[0] == fam]
         if matches:
             return default if default in matches else matches[0]
+    if fams[0] != "en":
+        raise NoVoice(fams[0])
     return picked or default
 
 
@@ -276,12 +315,13 @@ def _voice(voice_id: str):
         return _voices[path.stem]
 
 
-def synthesize(text: str, voice_id: str | None = None, speed: float = 1.0, language: str | None = None) -> bytes:
+def synthesize(text: str, voice_id: str | None = None, speed: float = 1.0, language: str | None = None,
+               by_language: dict | None = None) -> bytes:
     """Return WAV bytes. speed > 1 talks faster. language (like "hi" or "es") helps pick a voice for text
-    whose script does not show its language."""
+    whose script does not show its language; by_language maps a language to the user's voice for it."""
     from piper import SynthesisConfig
 
-    voice = _voice(voice_for(text, voice_id, language))
+    voice = _voice(voice_for(text, voice_id, language, by_language))
     speed = min(max(speed, 0.6), 1.8)
     buf = io.BytesIO()
     try:
@@ -294,19 +334,26 @@ def synthesize(text: str, voice_id: str | None = None, speed: float = 1.0, langu
 
 
 def _louder(wav_bytes: bytes, boost: float) -> bytes:
-    """Raise the average loudness for phone speakers without clipping: a soft (tanh) compressor lifts quiet
-    syllables more than loud ones. Measured 2026-10-25: Piper peaks at full scale but averages -17 dBFS;
-    boost 2.5 gives -11 dBFS (about 6 dB louder) with no audible distortion; 1 turns it off."""
+    """Even, clear loudness for phone speakers. Each clip is brought to the same average level (voices differ by
+    up to 8 dB), then only the loudest peaks are softened, so speech is not distorted. The earlier tanh
+    compressor squashed every loud syllable of the louder voices (Hindi, Arabic), which blurred them.
+    boost is the most a quiet clip is amplified; 1 turns it off."""
     if boost <= 1:
         return wav_bytes
     import numpy as np
 
     with wave.open(io.BytesIO(wav_bytes)) as src:
         params = src.getparams()
-        samples = np.frombuffer(src.readframes(src.getnframes()), dtype=np.int16).astype(np.float32) / 32768
-    louder = np.tanh(boost * samples) / np.tanh(boost)
+        x = np.frombuffer(src.readframes(src.getnframes()), dtype=np.int16).astype(np.float32) / 32768
+    voiced = x[np.abs(x) > 0.02]  # pauses would make the average look quieter than the speech is
+    rms = float(np.sqrt(np.mean(voiced ** 2))) if voiced.size else 0.0
+    if rms > 0:
+        x = x * min(boost, 10 ** (-12 / 20) / rms)  # target -12 dBFS while speaking: loud on phones, still clean
+    knee = 0.7
+    over = np.abs(x) > knee
+    x[over] = np.sign(x[over]) * (knee + (1 - knee) * np.tanh((np.abs(x[over]) - knee) / (1 - knee)))
     out = io.BytesIO()
     with wave.open(out, "wb") as dst:
         dst.setparams(params)
-        dst.writeframes((np.clip(louder, -1, 1) * 32767).astype(np.int16).tobytes())
+        dst.writeframes((np.clip(x, -1, 1) * 32767).astype(np.int16).tobytes())
     return out.getvalue()

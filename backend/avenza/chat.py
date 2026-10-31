@@ -85,7 +85,7 @@ def chat():
             rf"(?<!\w){re.escape(s['name'])}(?!\w)", question_text, re.I)), None)
     # No skill picked or named: the quick model may choose one by its description (started inside the stream).
     auto_skills = [] if skill is not None or data.get("skillId") else extensions.user_skills(user_id, enabled_only=True)
-    reply_language = languages.reply_rule(str(data.get("language") or "auto"), str(history[-1].get("content", "")))
+    reply_language, reply_code = languages.reply_rule(str(data.get("language") or "auto"), str(history[-1].get("content", "")))
     enabled_plugins = extensions.enabled_plugins(user_id)
     question = str(history[-1].get("content", ""))
     rows = get_db().execute(
@@ -98,6 +98,9 @@ def chat():
     @stream_with_context
     def generate():
         nonlocal skill  # may be chosen by its description below
+        if reply_code:
+            # The language the reply is written in: the app reads it aloud with a voice of that language.
+            yield _event({"type": "language", "code": reply_code})
         # "Create a PDF on X": research and write X, then save the answer as a file. Searching uses only the topic:
         # the words "write a document" would otherwise skip the web or point the search at the user's uploads.
         doc_req = None if voice else docgen.request(question)

@@ -22,6 +22,8 @@ av==15.1.0
 piper-tts==1.8.0
 # Japanese voices (Piper reads Japanese through OpenJTalk)
 pyopenjtalk==0.4.1
+# Which language a reply is in, to pick the voice that reads it
+langid==1.1.6
 # Used directly by the local NLP models (reranker + extractive QA)
 onnxruntime==1.30.0
 tokenizers==0.23.2

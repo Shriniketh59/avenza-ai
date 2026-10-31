@@ -56,12 +56,15 @@ export const voiceApi = {
   },
 
   /** language (a code like "hi" or "es") helps the server pick a voice of the reply's language. */
-  async speak(text: string, opts: { voice?: string; speed?: number; language?: string; signal?: AbortSignal }): Promise<Blob> {
+  async speak(
+    text: string,
+    opts: { voice?: string; voices?: Record<string, string>; speed?: number; language?: string; signal?: AbortSignal },
+  ): Promise<Blob> {
     assertBackend();
     const res = await fetch("/api/voice/speak", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text, voice: opts.voice || undefined, speed: opts.speed, language: opts.language || undefined }),
+      body: JSON.stringify({ text, voice: opts.voice || undefined, voices: opts.voices, speed: opts.speed, language: opts.language || undefined }),
       signal: opts.signal,
     });
     if (!res.ok) return fail(res, "Speech synthesis failed.");

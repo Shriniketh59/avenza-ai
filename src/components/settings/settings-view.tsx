@@ -188,7 +188,7 @@ const SAMPLES: Record<string, string> = {
 };
 const family = (locale: string) => locale.split(/[-_]/)[0];
 
-async function play(text: string, opts: { voice?: string; speed: number; language?: string }) {
+async function play(text: string, opts: { voice?: string; voices?: Record<string, string>; speed: number; language?: string }) {
   const blob = await voiceApi.speak(text, opts);
   const url = URL.createObjectURL(blob);
   const audio = new Audio(url);
@@ -199,7 +199,7 @@ async function play(text: string, opts: { voice?: string; speed: number; languag
 function VoiceTab() {
   const [prefs, update] = usePreferences();
   const [voices, setVoices] = useState<VoiceOption[]>([]);
-  const [testing, setTesting] = useState(false);
+  const [testing, setTesting] = useState<string | null>(null);
   const reload = useCallback(() => {
     if (isPreviewMode()) return;
     voiceApi.voices().then((r) => setVoices(r.voices)).catch(() => {});
@@ -207,21 +207,18 @@ function VoiceTab() {
 
   useEffect(reload, [reload]);
 
-  // Voices grouped by language for the picker.
+  // Installed voices grouped by language: each language gets its own voice choice.
   const groups = new Map<string, VoiceOption[]>();
-  for (const v of voices) groups.set(v.languageName, [...(groups.get(v.languageName) ?? []), v]);
-  const picked = voices.find((v) => v.id === prefs.ttsVoice);
-  const replyLang = prefs.replyLanguage !== "auto" ? prefs.replyLanguage : undefined;
+  for (const v of voices) groups.set(family(v.language), [...(groups.get(family(v.language)) ?? []), v]);
 
-  async function testVoice() {
-    setTesting(true);
+  async function testVoice(lang: string) {
+    setTesting(lang);
     try {
-      const lang = picked ? family(picked.language) : (replyLang ?? "en");
-      await play(SAMPLES[lang] ?? SAMPLES.en, { voice: prefs.ttsVoice, speed: prefs.ttsSpeed, language: lang });
+      await play(SAMPLES[lang] ?? SAMPLES.en, { voice: prefs.ttsVoices[lang], voices: prefs.ttsVoices, speed: prefs.ttsSpeed, language: lang });
     } catch {
       /* backend offline: button simply does nothing */
     } finally {
-      setTesting(false);
+      setTesting(null);
     }
   }
 
@@ -243,30 +240,6 @@ function VoiceTab() {
           }
         />
         <SettingRow
-          label="Assistant voice"
-          description="Automatic speaks each reply with an installed voice of its language. A voice you pick is used for its own language."
-          control={
-            <div className="flex items-center gap-2">
-              <select aria-label="Assistant voice" value={prefs.ttsVoice} onChange={(e) => update({ ttsVoice: e.target.value })} className={selectCls}>
-                <option value="">Automatic (matches the language)</option>
-                {[...groups].map(([lang, list]) => (
-                  <optgroup key={lang} label={lang}>
-                    {list.map((v) => (
-                      <option key={v.id} value={v.id}>
-                        {v.name}
-                        {v.country ? ` · ${v.country}` : ""} ({v.quality})
-                      </option>
-                    ))}
-                  </optgroup>
-                ))}
-              </select>
-              <Button variant="outline" size="sm" onClick={testVoice} disabled={testing}>
-                {testing ? "Playing…" : "Test"}
-              </Button>
-            </div>
-          }
-        />
-        <SettingRow
           label="Speaking speed"
           description={`${prefs.ttsSpeed.toFixed(1)}×`}
           control={
@@ -283,6 +256,45 @@ function VoiceTab() {
           }
         />
         <SettingRow label="Send after dictation" description="In the message box, send as soon as you stop speaking." control={<Switch label="Send after dictation" checked={prefs.autoSendVoice} onChange={(v) => update({ autoSendVoice: v })} />} />
+      </SettingsSection>
+      <SettingsSection
+        title="Voice for each language"
+        description="Each reply, translation and read-aloud uses the voice of its own language. Pick one per language, or leave Automatic. Languages with no voice here (like Tamil or Kannada) use your device's own voice; install more in the Voice library below."
+      >
+        {voices.length === 0 && <p className="text-sm text-muted">No voices installed.</p>}
+        {[...groups].map(([lang, list]) => (
+          <SettingRow
+            key={lang}
+            label={list[0].languageName + (list[0].nativeName && list[0].nativeName !== list[0].languageName ? ` · ${list[0].nativeName}` : "")}
+            description={`${list.length} voice${list.length > 1 ? "s" : ""} installed`}
+            control={
+              <div className="flex items-center gap-2">
+                <select
+                  aria-label={`Voice for ${list[0].languageName}`}
+                  value={prefs.ttsVoices[lang] ?? ""}
+                  onChange={(e) => {
+                    const next = { ...prefs.ttsVoices };
+                    if (e.target.value) next[lang] = e.target.value;
+                    else delete next[lang];
+                    update({ ttsVoices: next, ttsVoice: "" });
+                  }}
+                  className={selectCls}
+                >
+                  <option value="">Automatic</option>
+                  {list.map((v) => (
+                    <option key={v.id} value={v.id}>
+                      {v.name}
+                      {v.country ? ` · ${v.country}` : ""} ({v.quality})
+                    </option>
+                  ))}
+                </select>
+                <Button variant="outline" size="sm" onClick={() => testVoice(lang)} disabled={testing !== null}>
+                  {testing === lang ? "Playing…" : "Test"}
+                </Button>
+              </div>
+            }
+          />
+        ))}
       </SettingsSection>
       <VoiceLibrary onChange={reload} speed={prefs.ttsSpeed} />
     </>

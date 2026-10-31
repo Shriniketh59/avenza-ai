@@ -6,6 +6,8 @@ import { voiceApi } from "@/lib/voice-api";
 
 interface Options {
   voice: string;
+  /** The user's voice for each language (Settings). */
+  voices?: Record<string, string>;
   speed: number;
   /** Language code of what is spoken, when known (helps pick a voice of that language). */
   language?: string;
@@ -40,12 +42,21 @@ function attachMeter(meter: { current: Meter | null }, el: HTMLAudioElement) {
   }
 }
 
+// Non-Latin scripts name their language: used to pick the device voice when the reply's language is not known.
+const SCRIPTS: [RegExp, string][] = [
+  [/[\u0b80-\u0bff]/, "ta"], [/[\u0c80-\u0cff]/, "kn"], [/[\u0a80-\u0aff]/, "gu"], [/[\u0a00-\u0a7f]/, "pa"],
+  [/[\u0c00-\u0c7f]/, "te"], [/[\u0d00-\u0d7f]/, "ml"], [/[\u0980-\u09ff]/, "bn"], [/[\u0900-\u097f]/, "hi"],
+  [/[\u0600-\u06ff]/, "ar"], [/[\u0400-\u04ff]/, "ru"], [/[\u3040-\u30ff]/, "ja"], [/[\uac00-\ud7af]/, "ko"],
+  [/[\u4e00-\u9fff]/, "zh"], [/[\u0e00-\u0e7f]/, "th"], [/[\u0590-\u05ff]/, "he"], [/[\u0370-\u03ff]/, "el"],
+];
+const scriptLanguage = (text: string) => SCRIPTS.find(([re]) => re.test(text))?.[1];
+
 /**
  * Plays sentences in order through the local Piper voice, prefetching the next
  * sentence while the current one plays. Falls back to the browser voice if the
  * backend cannot synthesise.
  */
-export function useSpeechPlayer({ voice, speed, language, onIdle }: Options) {
+export function useSpeechPlayer({ voice, voices, speed, language, onIdle }: Options) {
   const [speaking, setSpeaking] = useState(false);
   /** The sentence being spoken right now (for live captions). */
   const [current, setCurrent] = useState("");
@@ -56,12 +67,12 @@ export function useSpeechPlayer({ voice, speed, language, onIdle }: Options) {
   const generation = useRef(0);
   const audio = useRef<HTMLAudioElement | null>(null);
   const abort = useRef<AbortController | null>(null);
-  const opts = useRef({ voice, speed, language, onIdle });
+  const opts = useRef({ voice, voices, speed, language, onIdle });
   // Indirection so playNext can schedule itself from audio callbacks.
   const next = useRef<() => void>(() => {});
 
   useEffect(() => {
-    opts.current = { voice, speed, language, onIdle };
+    opts.current = { voice, voices, speed, language, onIdle };
   });
 
   const fetchAudio = useCallback((text: string) => {
@@ -70,6 +81,7 @@ export function useSpeechPlayer({ voice, speed, language, onIdle }: Options) {
       abort.current ??= new AbortController();
       p = voiceApi.speak(text, {
         voice: opts.current.voice,
+        voices: opts.current.voices,
         speed: opts.current.speed,
         language: opts.current.language,
         signal: abort.current.signal,
@@ -119,10 +131,17 @@ export function useSpeechPlayer({ voice, speed, language, onIdle }: Options) {
       await el.play();
     } catch {
       if (gen !== generation.current) return;
-      // Fallback: the browser's own speech engine.
+      // Fallback: the device's own speech engine, which has voices for languages AVENZA has none installed for
+      // (Tamil, Kannada, Gujarati on Android and Chrome), and when the server cannot speak.
       if ("speechSynthesis" in window) {
-        const u = new SpeechSynthesisUtterance(text.replace(/[*#`_>|]/g, ""));
+        const u = new SpeechSynthesisUtterance(text.replace(/[*#`_>|]/g, "").replace(/\[\d+(?:,\s*\d+)*\]/g, ""));
         u.rate = opts.current.speed;
+        const lang = opts.current.language ?? scriptLanguage(text);
+        if (lang) {
+          u.lang = lang;
+          const match = window.speechSynthesis.getVoices().find((v) => v.lang.toLowerCase().startsWith(lang.toLowerCase()));
+          if (match) u.voice = match;
+        }
         u.onend = done;
         u.onerror = done;
         window.speechSynthesis.speak(u);
