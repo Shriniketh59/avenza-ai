@@ -22,6 +22,7 @@ Every answer is built from real sources (your documents, saved memory, recent ne
 - [Agents](#agents)
 - [How answers stay accurate](#how-answers-stay-accurate)
 - [Using AVENZA](#using-avenza)
+- [Android app](#android-app)
 - [Configuration](#configuration)
 - [Manual setup](#manual-setup)
 - [Troubleshooting](#troubleshooting)
@@ -184,6 +185,23 @@ The LLM is used to **write** answers quickly; **facts come from sources**.
 - **Fast / Accurate** (in the agent menu) picks the smaller or larger model. Code, Debugging, Math, Reasoning and image agents always use the larger one.
 - **Voice mode**: press the wave button when the message box is empty. Say "new chat", "search the web for …", "turn off web search" or "goodbye". Tap anywhere to interrupt. The microphone works on `http://localhost:3000` or HTTPS only (browser rule).
 - **Memory**: say "remember that …" or "my name is …". Turn it off in Settings.
+
+---
+
+## Android app
+
+`android/` holds a small native app: AVENZA full screen, with the camera (scanning), microphone (voice), file uploads and downloads. It loads the AVENZA server running on your computer.
+
+```bash
+android/build.sh             # builds android/build/avenza-ai.apk
+android/build.sh --install   # also installs it on a phone connected by USB and links it to this computer
+```
+
+It needs JDK 17+ and the Android SDK (`platforms;android-35`, `build-tools;35.0.0`), no Android Studio or Gradle.
+
+- **Over USB** (USB debugging on): `--install` runs `adb reverse tcp:3000 tcp:3000`, so the phone's `http://localhost:3000` reaches AVENZA. Run `adb reverse tcp:3000 tcp:3000` again after reconnecting the cable.
+- **Over Wi-Fi or mobile data**: start an https tunnel (`cloudflared tunnel --url http://localhost:3000`) and enter its link on the app's *Connect* screen. The camera and microphone need https or localhost.
+- To change the server later, press Back on the home screen and choose *Change server address*.
 
 ---
 

@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Connect AVENZA</title>
+<style>
+  :root { color-scheme: dark; }
+  body { margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center;
+         background: #070f24; color: #e8ecf8; font: 16px/1.5 system-ui, sans-serif; padding: 24px; box-sizing: border-box; }
+  main { width: 100%; max-width: 420px; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  p { color: #a5afc8; margin: 0 0 16px; font-size: 14px; }
+  label { display: block; font-size: 13px; color: #a5afc8; margin-bottom: 6px; }
+  input { width: 100%; box-sizing: border-box; padding: 12px 14px; border-radius: 12px; border: 1px solid #2a3557;
+          background: #0e1834; color: #e8ecf8; font-size: 16px; }
+  button { width: 100%; margin-top: 12px; padding: 12px; border: 0; border-radius: 12px; font-size: 16px; font-weight: 600;
+           background: linear-gradient(90deg, #6d5dfc, #22b8e6); color: #fff; }
+  .err { color: #ff8a8a; font-size: 13px; min-height: 20px; margin: 10px 0 0; }
+  ol { color: #a5afc8; font-size: 13px; padding-left: 18px; margin: 20px 0 0; }
+  code { color: #e8ecf8; background: #0e1834; padding: 1px 5px; border-radius: 6px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Connect to AVENZA</h1>
+  <p>The app could not reach the AVENZA server. Check the address, or start AVENZA on the computer.</p>
+  <form id="f">
+    <label for="url">Server address</label>
+    <input id="url" type="url" inputmode="url" autocomplete="url" required>
+    <button type="submit">Connect</button>
+    <p class="err" id="err"></p>
+  </form>
+  <ol>
+    <li>USB: keep <code>http://localhost:3000</code> and run <code>adb reverse tcp:3000 tcp:3000</code> on the computer.</li>
+    <li>Wi-Fi or mobile data: paste the <code>https://…trycloudflare.com</code> link.</li>
+  </ol>
+</main>
+<script>
+  var q = new URLSearchParams(location.search);
+  document.getElementById("url").value = q.get("url") || "http://localhost:3000";
+  document.getElementById("err").textContent = q.get("error") || "";
+  document.getElementById("f").addEventListener("submit", function (e) {
+    e.preventDefault();
+    var v = document.getElementById("url").value.trim().replace(/\/+$/, "");
+    if (!/^https?:\/\//.test(v)) v = "https://" + v;
+    window.Avenza.connect(v);
+  });
+</script>
+</body>
+</html>
