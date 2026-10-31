@@ -28,6 +28,10 @@ def create_app(config: type = Config) -> Flask:
 
     speech.warm_up(app)
 
+    from .ai import websearch
+
+    websearch.warm_up(app)
+
     @app.get("/health")
     def health():
         return jsonify(status="ok", ai=llm.status(), news=news.status())

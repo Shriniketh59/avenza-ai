@@ -26,25 +26,50 @@ def _one(query: str, n: int, backend: str) -> list[dict]:
     return list(DDGS().text(query, max_results=n, safesearch="moderate", backend=backend))
 
 
-def _search(query: str, n: int, timeout: float = 8.0) -> list[dict]:
+def _search(query: str, n: int, timeout: float = 8.0, grace: float = 5.0) -> list[dict]:
+    """Results from the first engine with a full list. After timeout seconds a partial list is used; with nothing
+    at all, it waits up to grace seconds more: answering from memory instead risks an outdated answer, and a slow
+    first search (cold connections, measured 2026-10-31: >4 s right after start, 1.3 s after) is worth waiting for."""
     pool = ThreadPoolExecutor(max_workers=len(_BACKENDS))
     futures = {pool.submit(_one, query, n, b): b for b in _BACKENDS}
     best: list[dict] = []
+    pending = set(futures)
     try:
-        for fut in as_completed(futures, timeout=timeout):
+        for limit in (timeout, grace):
             try:
-                results = fut.result()
-            except Exception as exc:  # rate limits / network / blocked engine
-                current_app.logger.info("web search via %s failed: %s", futures[fut], exc)
-                continue
-            if len(results) >= min(3, n):
-                return results
-            best = best or results  # Wikipedia alone often returns one page: keep it unless a fuller list arrives
-    except TimeoutError:
-        current_app.logger.warning("web search: no engine answered within %.0f s", timeout)
+                for fut in as_completed(pending, timeout=limit):
+                    pending.discard(fut)
+                    try:
+                        results = fut.result()
+                    except Exception as exc:  # rate limits / network / blocked engine
+                        current_app.logger.info("web search via %s failed: %s", futures[fut], exc)
+                        continue
+                    if len(results) >= min(3, n):
+                        return results
+                    best = best or results  # Wikipedia alone often returns one page: keep it unless a fuller list arrives
+                break  # every engine answered
+            except TimeoutError:
+                if best:
+                    break
+                current_app.logger.warning("web search: no engine answered within %.1f s%s", limit,
+                                           ", waiting longer" if limit == timeout else "")
     finally:
         pool.shutdown(wait=False, cancel_futures=True)
     return best
+
+
+def warm_up(app) -> None:
+    """One search in the background at start-up, so the first real question does not pay for cold connections."""
+    import threading
+
+    def run():
+        with app.app_context():
+            try:
+                _search("AVENZA warm up", 1, timeout=10, grace=0)
+            except Exception as exc:
+                app.logger.info("web search warm-up failed: %s", exc)
+
+    threading.Thread(target=run, name="web-warmup", daemon=True).start()
 
 
 # Wikipedia-style reference markers ("[82]", "[citation needed]") break sentence boundaries.

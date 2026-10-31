@@ -85,7 +85,7 @@ def chat():
             rf"(?<!\w){re.escape(s['name'])}(?!\w)", question_text, re.I)), None)
     # No skill picked or named: the quick model may choose one by its description (started inside the stream).
     auto_skills = [] if skill is not None or data.get("skillId") else extensions.user_skills(user_id, enabled_only=True)
-    reply_language = languages.reply_rule(str(data.get("language") or "auto"))
+    reply_language = languages.reply_rule(str(data.get("language") or "auto"), str(history[-1].get("content", "")))
     enabled_plugins = extensions.enabled_plugins(user_id)
     question = str(history[-1].get("content", ""))
     rows = get_db().execute(
@@ -306,7 +306,7 @@ def chat():
                 # Voice answers come from the NLP reader over the sources, never from the LLM.
                 # The canned replies are English: a reply language picked in Settings goes to the LLM instead.
                 answer = voice_answer.instant(question, memorable=memorable, use_memory=use_memory) \
-                    if reply_language == languages.AUTO_RULE or "in English," in reply_language else None
+                    if reply_language in (languages.AUTO_RULE, languages.ENGLISH_RULE) or "in English," in reply_language else None
                 if answer is not None:
                     yield _event({"type": "token", "value": answer})
                 else:

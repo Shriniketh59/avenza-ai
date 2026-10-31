@@ -55,7 +55,7 @@ fi
 for b in google-chrome google-chrome-stable /opt/google/chrome/google-chrome chromium chromium-browser \
          microsoft-edge brave-browser; do
   if command -v "$b" >/dev/null || [[ -x "$b" ]]; then
-    exec "$b" --app="$URL" --class=AvenzaAI --window-size=1280,860
+    exec "$b" --app="$URL" --class=AvenzaAI --start-maximized
   fi
 done
 xdg-open "$URL"  # no Chromium-based browser: a normal browser tab
