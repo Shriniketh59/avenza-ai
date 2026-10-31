@@ -1,4 +1,4 @@
-"""Built-in plugins: live tools a user switches on in Settings (stocks, currency, weather, calculator).
+"""Built-in plugins: live tools a user switches on in Settings (stocks, currency, weather, calculator, GitHub).
 
 Each plugin turns a question into exact data from a named source. Its result becomes a cited source passage
 (kind "plugin"), so the model answers from it like any other source and never guesses the figure.
@@ -35,6 +35,12 @@ PLUGINS = {
         "name": "Calculator",
         "description": "Exact arithmetic for expressions like 2450 * 1.18 or (1 + 0.08)^5.",
         "source": "AVENZA calculator",
+    },
+    "github": {
+        "name": "GitHub",
+        "description": "Live facts on public repositories: stars, forks, issues, latest release, license and README. "
+                       "Paste a github.com link or ask about owner/repo.",
+        "source": "GitHub",
     },
 }
 
@@ -80,6 +86,12 @@ _FILLER = re.compile(r"^(?:what(?:'s| is| are)?|how(?:'s| is| much is)?|tell me|
 _INDEXES = {"nifty": "^NSEI", "nifty 50": "^NSEI", "nifty50": "^NSEI", "nifty bank": "^NSEBANK", "sensex": "^BSESN",
             "nasdaq": "^IXIC", "dow jones": "^DJI", "s&p 500": "^GSPC", "s&p500": "^GSPC"}
 
+_GH_URL = re.compile(r"github\.com/(?P<owner>[\w.-]+)/(?P<repo>[\w.-]+)", re.I)
+_GH_SLUG = re.compile(r"(?<![\w./])(?P<owner>[A-Za-z0-9][\w-]{0,38})/(?P<repo>[\w.-]{1,100})(?![\w/])")
+_GH_HINT = re.compile(r"\b(github|repo|repository|stars?|forks?|release)\b", re.I)
+_GH_NAME = re.compile(r"\b(?:github\s+(?:repo(?:sitory)?\s+)?(?:of|for)\s+|(?:repo(?:sitory)?|github)\s+(?:of|for)\s+)"
+                      r"(?P<name>[\w.\- ]{2,40}?)\s*[?.!]*$|^\s*(?P<name2>[\w.\-]{2,40})\s+(?:github|repo)\s*[?.!]*$", re.I)
+
 _CALC_HINT = re.compile(r"^\s*(calculate|compute|what is|what's|evaluate|solve)?\s*[(\d.]", re.I)
 _EXPR = re.compile(r"[\d.\s+\-*/×÷^%(),]+")
 
@@ -119,6 +131,14 @@ def detect(question: str, enabled: set[str]) -> list[tuple[str, dict]]:
                                                  r"what|why|how|invest|portfolio|this|that|these|those|their|its)\b", name, re.I):
                 calls.append(("stocks", {"name": name}))
                 break
+    if "github" in enabled and not calls:
+        m = _GH_URL.search(q) or (_GH_HINT.search(q) and _GH_SLUG.search(q))
+        if m:
+            calls.append(("github", {"owner": m["owner"], "repo": m["repo"].removesuffix(".git").rstrip(".")}))
+        else:
+            m = _GH_NAME.search(q)
+            if m:
+                calls.append(("github", {"search": (m["name"] or m["name2"]).strip()}))
     if "calculator" in enabled and not calls:
         body = re.sub(r"^\s*(calculate|compute|what is|what's|evaluate|solve)\s*", "", q, flags=re.I).rstrip(" ?=.")
         if _CALC_HINT.match(q) and _EXPR.fullmatch(body) and re.search(r"\d\s*[-+*/×÷^%]\s*\(?\d", body):
@@ -241,9 +261,26 @@ def calculator(expr: str) -> dict | None:
     return _item("calculator", "Calculation", f"{expr.strip()} = {shown}")
 
 
-_RUN = {"currency": currency, "weather": weather, "stocks": stock, "calculator": calculator}
+def github_repo(owner: str | None = None, repo: str | None = None, search: str | None = None) -> dict | None:
+    from . import github
+
+    if search:
+        found = github.api("/search/repositories", q=search, per_page=1).get("items") or []
+        if not found:
+            return None
+        owner, repo = found[0]["owner"]["login"], found[0]["name"]
+    try:
+        info = github.repo_summary(owner, repo)
+    except github.GitHubError:
+        return None
+    text = info["text"] + f" Retrieved {datetime.now():%d %b %Y %H:%M}."
+    return _item("github", f"GitHub · {info['title']}", text, info["url"])
+
+
+_RUN = {"currency": currency, "weather": weather, "stocks": stock, "calculator": calculator, "github": github_repo}
 _ARGS = {"currency": lambda a: (a["src"], a["dst"], a["amount"]), "weather": lambda a: (a["place"],),
-         "stocks": lambda a: (a["name"],), "calculator": lambda a: (a["expr"],)}
+         "stocks": lambda a: (a["name"],), "calculator": lambda a: (a["expr"],),
+         "github": lambda a: (a.get("owner"), a.get("repo"), a.get("search"))}
 
 
 def run(pid: str, args: dict) -> dict | None:

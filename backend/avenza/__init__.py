@@ -12,12 +12,12 @@ def create_app(config: type = Config) -> Flask:
 
     init_db(app)
 
-    from . import auth, chat, documents, extensions, memory, usage, users, voice
+    from . import auth, chat, documents, extensions, memory, scans, usage, users, voice
     from .ai import llm
 
-    from .ai import imagegen
+    from .ai import docgen, imagegen
 
-    for module in (auth, users, chat, documents, extensions, memory, usage, voice, imagegen):
+    for module in (auth, users, chat, documents, extensions, memory, scans, usage, voice, imagegen, docgen):
         app.register_blueprint(module.bp)
 
     from .ai import news

@@ -170,12 +170,15 @@ def stream_chat(messages: list[dict], mode: str | None = None, reasoning: str | 
     usage, written = None, 0
     try:
         with res:
-            for kind, value in itertools.chain(first, events):
-                if kind == "usage":
-                    usage = value
-                else:
-                    written += len(value)
-                    yield value
+            try:
+                for kind, value in itertools.chain(first, events):
+                    if kind == "usage":
+                        usage = value
+                    else:
+                        written += len(value)
+                        yield value
+            except requests.RequestException as exc:  # the free tier sometimes drops a reply halfway
+                raise LLMUnavailable(f"The connection to {name} dropped in the middle of the answer. Please ask again.") from exc
     finally:
         if usage:
             _count(mode, int(usage.get("prompt_tokens") or 0), int(usage.get("completion_tokens") or 0))

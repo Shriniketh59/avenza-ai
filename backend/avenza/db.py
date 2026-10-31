@@ -33,6 +33,15 @@ CREATE TABLE IF NOT EXISTS usage_events (
     weighted       INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS usage_events_user_at ON usage_events(user_id, at);
+CREATE TABLE IF NOT EXISTS doc_chunks (
+    document_id  TEXT NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+    user_id      INTEGER NOT NULL,
+    idx          INTEGER NOT NULL,
+    text         TEXT NOT NULL,
+    page         INTEGER,
+    PRIMARY KEY (document_id, idx)
+);
+CREATE INDEX IF NOT EXISTS doc_chunks_user ON doc_chunks(user_id);
 CREATE TABLE IF NOT EXISTS skills (
     id            TEXT PRIMARY KEY,
     user_id       INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -82,7 +91,15 @@ def init_db(app):
             conn.execute("UPDATE documents SET indexed = chunks")
         if "error" not in cols:
             conn.execute("ALTER TABLE documents ADD COLUMN error TEXT")
-        # Indexing jobs live in memory; anything unfinished at shutdown cannot resume.
+        # Skills: switched off without deleting; source_url is where an imported skill is updated from.
+        cols = {r[1] for r in conn.execute("PRAGMA table_info(skills)")}
+        if "enabled" not in cols:
+            conn.execute("ALTER TABLE skills ADD COLUMN enabled INTEGER NOT NULL DEFAULT 1")
+        if "source_url" not in cols:
+            conn.execute("ALTER TABLE skills ADD COLUMN source_url TEXT")
+        # Indexing jobs live in memory; anything unfinished at shutdown cannot resume. A camera scan keeps its
+        # pages' text (keyword search still finds them), so it stays usable.
+        conn.execute("UPDATE documents SET status = 'ready' WHERE status = 'indexing' AND mime_type = 'application/x-avenza-scan'")
         conn.execute(
             "UPDATE documents SET status = 'error', error = 'Indexing was interrupted. Please upload the file again.' "
             "WHERE status = 'indexing'"

@@ -113,7 +113,7 @@ MATH = Agent(
     "math",
     "Math",
     """Role: mathematician and patient tutor.
-- Restate the problem, define the variables, then solve step by step with every algebraic or numeric step shown as inline code, like `2x + 3 = 11  ->  2x = 8  ->  x = 4`.
+- Restate the problem, define the variables, then solve step by step with every algebraic or numeric step written as LaTeX math, like \\( 2x + 3 = 11 \\Rightarrow 2x = 8 \\Rightarrow x = 4 \\); put the main formula on its own line as \\[ ... \\].
 - Keep exact values (fractions, surds) until the end; give decimals rounded sensibly, with units.
 - Verify the result: substitute it back, check units, or estimate.
 - End with "**Answer:**" and the final result.
@@ -223,7 +223,7 @@ VOICE = Agent(
     "Voice",
     """Role: voice assistant. Your reply is read aloud.
 - Answer in 2 to 5 short, natural spoken sentences. Direct answer first, then a brief explanation.
-- Plain text only: no Markdown, lists, tables, code, emoji or URLs. Write numbers and units so they sound natural.
+- Plain text only: no Markdown, lists, tables, code, LaTeX or math notation, emoji or URLs. Say formulas in words ("the square root of 4"). Write numbers and units so they sound natural.
 - For jokes, stories or casual chat, just respond naturally and briefly.""",
     mode="fast",
     reasoning="minimal",  # fastest first word; accuracy comes from the sources

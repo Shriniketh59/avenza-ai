@@ -6,8 +6,8 @@ from concurrent.futures import ThreadPoolExecutor
 from flask import Blueprint, Response, current_app, g, jsonify, request, stream_with_context
 
 from . import extensions, usage
-from .ai import (agents, factcheck, imagegen, llm, news as news_feed, nlp, plugins, rag, understand, vectorstore,
-                 voice_answer, websearch)
+from .ai import (agents, docgen, factcheck, imagegen, languages, llm, news as news_feed, nlp, plugins, rag, understand,
+                 vectorstore, voice_answer, websearch)
 from .db import get_db
 from .tokens import require_auth
 
@@ -31,6 +31,12 @@ def _same_search(a: str, b: str) -> bool:
     """Whether two search queries are close enough that one's results serve the other."""
     wa, wb = _words(a), _words(b)
     return bool(wa and wb) and len(wa & wb) / len(wb) >= 0.6
+
+
+def _download(made: dict, lead: str) -> str:
+    """Markdown link the chat shows as a download button (see markdown.tsx)."""
+    kb = max(1, round(made["size"] / 1024))
+    return f"\n\n---\n\n{lead} [⬇ {made['name']} ({kb} KB)](/api/files/{made['id']})"
 
 
 def _event(obj: dict) -> str:
@@ -66,12 +72,20 @@ def chat():
     if limit:
         return jsonify(error=limit, code="USAGE_LIMIT"), 429
     g.usage = {}  # filled by every API call in this turn (llm._count), stored when the turn ends
-    # The user's skill for this turn: the one picked in the menu, else one whose name the message mentions.
-    skill = extensions.user_skill(user_id, str(data["skillId"])) if data.get("skillId") else None
-    if skill is None and not data.get("skillId"):
+    # "/meeting-notes <text>" runs that skill on the text; the command itself is not part of the question.
+    skill, rest = extensions.skill_command(user_id, str(history[-1].get("content", "")))
+    if skill is not None:
+        history[-1] = {**history[-1], "content": rest or f"Run the \u201c{skill['name']}\u201d skill. {skill['description']}"}
+    # Otherwise the skill picked in the menu, else one whose name the message mentions.
+    elif data.get("skillId"):
+        skill = extensions.user_skill(user_id, str(data["skillId"]))
+    else:
         question_text = str(history[-1].get("content", ""))
-        skill = next((s for s in extensions.user_skills(user_id) if len(s["name"]) >= 4 and re.search(
+        skill = next((s for s in extensions.user_skills(user_id, enabled_only=True) if len(s["name"]) >= 4 and re.search(
             rf"(?<!\w){re.escape(s['name'])}(?!\w)", question_text, re.I)), None)
+    # No skill picked or named: the quick model may choose one by its description (started inside the stream).
+    auto_skills = [] if skill is not None or data.get("skillId") else extensions.user_skills(user_id, enabled_only=True)
+    reply_language = languages.reply_rule(str(data.get("language") or "auto"))
     enabled_plugins = extensions.enabled_plugins(user_id)
     question = str(history[-1].get("content", ""))
     rows = get_db().execute(
@@ -83,13 +97,18 @@ def chat():
 
     @stream_with_context
     def generate():
-        analysis = nlp.analyze_query(question)
-        memorable = bool(_MEMORABLE.search(question)) and "?" not in question
+        nonlocal skill  # may be chosen by its description below
+        # "Create a PDF on X": research and write X, then save the answer as a file. Searching uses only the topic:
+        # the words "write a document" would otherwise skip the web or point the search at the user's uploads.
+        doc_req = None if voice else docgen.request(question)
+        topic = doc_req.topic if doc_req and not doc_req.from_previous and doc_req.topic else question
+        analysis = nlp.analyze_query(topic)
+        memorable = bool(_MEMORABLE.search(question)) and "?" not in question and doc_req is None
         docs, memories, news, web = [], [], [], []
-        query = rag.search_query(history, question)
+        query = rag.search_query(history, topic)
         app = current_app._get_current_object()
         flash = mode == "fast"
-        length = nlp.answer_length(question)
+        length = "detailed" if doc_req else nlp.answer_length(question)
         news_feed.chat_active.set()
         pool = ThreadPoolExecutor(max_workers=4)
 
@@ -102,6 +121,20 @@ def chat():
             return pool.submit(run_web)
 
         try:
+            # "Convert this to PDF": the last answer becomes the file; nothing new is written.
+            if doc_req and doc_req.from_previous:
+                previous = next((str(m.get("content", "")) for m in reversed(history[:-1])
+                                 if m.get("role") == "assistant" and str(m.get("content", "")).strip()), "")
+                if not previous:
+                    yield _event({"type": "token", "value": "There is no earlier answer to save yet. Tell me what the "
+                                  "document should cover, for example: *create a PDF on SIP vs lump sum*."})
+                else:
+                    yield _tool("document", "document", "running", doc_req.fmt.upper())
+                    made = docgen.build(previous, doc_req.fmt, user_id, "AVENZA AI answer")
+                    yield _tool("document", "document", "succeeded", made["name"])
+                    yield _event({"type": "token", "value": _download(made, "Here is the previous answer as a file:")})
+                yield _event({"type": "done"})
+                return
             # Read the message like a person first (typos, shorthand, "it" = earlier topic). Voice stays LLM-free.
             understood = None
             simple = memorable or analysis.intent == "smalltalk" or nlp.CLOCK.search(question)
@@ -111,18 +144,24 @@ def chat():
             if use_web and analysis.needs_web and not voice and not simple and not images and not files_now:
                 early_web = start_web(query)
             # Plugins (stocks, currency, weather, calculator) start at once too; their data becomes a cited source.
-            plugin_calls = [] if voice or simple or images else plugins.detect(question, enabled_plugins)
+            plugin_calls = [] if voice or simple or images or doc_req else plugins.detect(question, enabled_plugins)
 
             def run_plugin(pid: str, args: dict):
                 with app.app_context():
                     return plugins.run(pid, args)
 
             plugin_futures = [pool.submit(run_plugin, pid, args) for pid, args in plugin_calls]
+
+            def run_pick():
+                with app.app_context():
+                    return extensions.pick_skill(question, auto_skills)
+
+            skill_future = pool.submit(run_pick) if auto_skills and not voice and not simple else None
             for pid, _ in plugin_calls:
                 yield _tool(f"plugin-{pid}", "plugin", "running", plugins.PLUGINS[pid]["name"])
             if not voice and not simple and current_app.config["UNDERSTAND_ENABLED"]:
                 yield _tool("understand", "understand", "running")
-                understood = understand.understand(history, question, has_images=bool(images), has_files=files_now)
+                understood = understand.understand(history, topic, has_images=bool(images), has_files=files_now)
                 if understood:
                     analysis = nlp.analyze_query(understood.question)
                     query = understood.search or understood.question.split("\n\nOriginal message:")[0][:300]
@@ -154,7 +193,7 @@ def chat():
             elif agent.id == "image" or (agent.id == "diagram" and images):
                 analysis.needs_retrieval = False  # the image is the source; a document search only adds seconds
             # "Create an image of …": the image model answers directly; no search, no sources.
-            if not voice and imagegen.REQUEST.search(question) and not agents._DIAGRAM.search(question):
+            if not voice and not doc_req and imagegen.REQUEST.search(question) and not agents._DIAGRAM.search(question):
                 if early_web is not None:
                     early_web.cancel()
                 prompt = question
@@ -183,6 +222,12 @@ def chat():
                     plugin_items.append(found)
             if plugin_items:
                 analysis.needs_web = False  # the plugin's live data answers it; the web would only add seconds
+            if skill_future is not None:
+                try:
+                    picked = skill_future.result(timeout=4)
+                except Exception:
+                    picked = None
+                skill = next((x for x in auto_skills if x["id"] == picked), None)
             if skill is not None and not voice:
                 yield _tool("skill", "skill", "succeeded", skill["name"])
             # The web search runs while local retrieval happens.
@@ -259,7 +304,9 @@ def chat():
 
             if voice:
                 # Voice answers come from the NLP reader over the sources, never from the LLM.
-                answer = voice_answer.instant(question, memorable=memorable, use_memory=use_memory)
+                # The canned replies are English: a reply language picked in Settings goes to the LLM instead.
+                answer = voice_answer.instant(question, memorable=memorable, use_memory=use_memory) \
+                    if reply_language == languages.AUTO_RULE or "in English," in reply_language else None
                 if answer is not None:
                     yield _event({"type": "token", "value": answer})
                 else:
@@ -267,6 +314,7 @@ def chat():
                     # grounded on the sources retrieved for it (quoting sentences gave stilted, often wrong answers).
                     voice_agent = agents.VOICE
                     messages = rag.build_messages(history, items, memories, analysis, pending, False, voice_agent)
+                    messages[0]["content"] += "\n\n" + reply_language
                     for chunk in llm.stream_chat(messages, voice_agent.mode, voice_agent.reasoning):
                         yield _event({"type": "token", "value": chunk})
             else:
@@ -292,6 +340,9 @@ def chat():
                     last = messages[-1]
                     if isinstance(last.get("content"), str):
                         messages[-1] = {**last, "content": f"{last['content']}\n\n({rag.LENGTH_RULES[length]})"}
+                if doc_req:
+                    messages[0]["content"] += "\n\n" + docgen.TEMPLATE_RULE
+                messages[0]["content"] += "\n\n" + reply_language
                 if not chatty:
                     yield _tool("model", "model", "succeeded", model_name)
                 chunks = llm.stream_chat(messages, used, agent.reasoning)
@@ -303,6 +354,15 @@ def chat():
                 flagged = factcheck.unsupported_figures("".join(answer), evidence) if agent.factcheck else []
                 if flagged:
                     yield _event({"type": "token", "value": factcheck.warning(flagged, bool(items))})
+                if doc_req and "".join(answer).strip():
+                    yield _tool("document", "document", "running", doc_req.fmt.upper())
+                    try:
+                        made = docgen.build("".join(answer), doc_req.fmt, user_id, topic, items)
+                        yield _tool("document", "document", "succeeded", made["name"])
+                        yield _event({"type": "token", "value": _download(made, "Your document is ready:")})
+                    except Exception:
+                        current_app.logger.exception("document generation failed")
+                        yield _tool("document", "document", "failed", "could not create the file")
 
             if use_memory and _MEMORABLE.search(question) and len(question) < 500:
                 vectorstore.add(vectorstore.MEMORY, user_id, [uuid.uuid4().hex], [question], [{"source": "chat"}])

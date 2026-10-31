@@ -16,9 +16,22 @@ export interface Transcription {
 
 export interface VoiceOption {
   id: string;
+  /** Locale like "hi-IN". */
   language: string;
   name: string;
   quality: string;
+  languageName: string;
+  nativeName: string;
+  country: string;
+}
+
+/** A voice in Piper's catalog (installed or not). */
+export interface CatalogVoice extends VoiceOption {
+  speakers: number;
+  sizeMb: number;
+  state: "installed" | "installing" | "available" | "error";
+  progress: number;
+  error: string | null;
 }
 
 function assertBackend() {
@@ -42,12 +55,13 @@ export const voiceApi = {
     return res.json();
   },
 
-  async speak(text: string, opts: { voice?: string; speed?: number; signal?: AbortSignal }): Promise<Blob> {
+  /** language (a code like "hi" or "es") helps the server pick a voice of the reply's language. */
+  async speak(text: string, opts: { voice?: string; speed?: number; language?: string; signal?: AbortSignal }): Promise<Blob> {
     assertBackend();
     const res = await fetch("/api/voice/speak", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text, voice: opts.voice || undefined, speed: opts.speed }),
+      body: JSON.stringify({ text, voice: opts.voice || undefined, speed: opts.speed, language: opts.language || undefined }),
       signal: opts.signal,
     });
     if (!res.ok) return fail(res, "Speech synthesis failed.");
@@ -60,6 +74,26 @@ export const voiceApi = {
     if (!res.ok) return fail(res, "Could not load voices.");
     return res.json();
   },
+
+  /** Every Piper voice, with install state. */
+  async catalog(): Promise<{ voices: CatalogVoice[]; default: string }> {
+    assertBackend();
+    const res = await fetch("/api/voice/catalog");
+    if (!res.ok) return fail(res, "Could not load the voice library.");
+    return res.json();
+  },
+
+  async install(id: string): Promise<void> {
+    assertBackend();
+    const res = await fetch(`/api/voice/voices/${encodeURIComponent(id)}`, { method: "POST" });
+    if (!res.ok) return fail(res, "Could not install the voice.");
+  },
+
+  async remove(id: string): Promise<void> {
+    assertBackend();
+    const res = await fetch(`/api/voice/voices/${encodeURIComponent(id)}`, { method: "DELETE" });
+    if (!res.ok) return fail(res, "Could not remove the voice.");
+  },
 };
 
 /**
@@ -70,7 +104,10 @@ export function takeSentences(buffer: string, final = false): [string[], string]
   if (!final && (buffer.match(/```/g)?.length ?? 0) % 2 === 1) return [[], buffer];
   const out: string[] = [];
   // Mid-stream, a sentence ends only at punctuation followed by whitespace, so "5." + "25" is not split.
-  const re = final ? /[^.!?\n]*?(?:[.!?](?=\s|$)|\n+)/g : /[^.!?\n]*?(?:[.!?](?=\s)|\n+)/g;
+  // Also the Devanagari danda (।) and CJK full stops, which need no space after them.
+  const re = final
+    ? /[^.!?؟।。！？\n]*?(?:[.!?؟](?=\s|$)|[।。！？]|\n+)/g
+    : /[^.!?؟।。！？\n]*?(?:[.!?؟](?=\s)|[।。！？]|\n+)/g;
   let last = 0;
   let m: RegExpExecArray | null;
   while ((m = re.exec(buffer))) {

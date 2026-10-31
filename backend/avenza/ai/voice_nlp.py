@@ -83,6 +83,11 @@ def speakable(markdown: str) -> str:
     """Turn a Markdown reply into text that sounds natural when read aloud."""
     t = re.sub(r"```.*?```", " (code shown on screen) ", markdown, flags=re.S)
     t = re.sub(r"`([^`]+)`", r"\1", t)
+    t = re.sub(r"\\[()\[\]]|\${2}", " ", t)  # LaTeX math delimiters (the voice prompt asks for words, this is a backstop)
+    t = re.sub(r"\\(?:frac|dfrac)\{([^{}]*)\}\{([^{}]*)\}", r"\1 over \2", t)
+    t = re.sub(r"\\sqrt\{([^{}]*)\}", r"the square root of \1", t)
+    t = re.sub(r"\\(times|cdot)", " times ", t)
+    t = re.sub(r"\\([a-zA-Z]+)", r"\1", t).replace("{,}", ",").replace("{", "").replace("}", "")
     t = re.sub(r"!\[[^\]]*\]\([^)]*\)", "", t)
     t = re.sub(r"\[([^\]]+)\]\((https?://[^)]+)\)", r"\1", t)
     t = re.sub(r"https?://\S+", "", t)

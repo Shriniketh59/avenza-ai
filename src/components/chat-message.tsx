@@ -45,7 +45,15 @@ export const ChatMessage = memo(function ChatMessage({ message, isLast, canRegen
           </div>
         )}
         <div className="max-w-[80%] whitespace-pre-wrap break-words rounded-3xl rounded-tr-md bg-surface-3 px-5 py-3 text-[0.97rem] leading-relaxed">
-          {message.content}
+          {/^\/[\w-]+/.test(message.content) ? (
+            <>
+              {/* A skill command ("/meeting-notes ..."), shown like a chip. */}
+              <span className="rounded-md bg-accent/15 px-1.5 py-0.5 font-medium text-accent">{message.content.match(/^\/[\w-]+/)![0]}</span>
+              {message.content.replace(/^\/[\w-]+/, "")}
+            </>
+          ) : (
+            message.content
+          )}
         </div>
         {time && <span className="text-[0.7rem] text-muted">{time}</span>}
       </div>

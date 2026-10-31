@@ -50,7 +50,7 @@ function ShellInner({ user, children }: { user: User; children: ReactNode }) {
 
   return (
     <ShellContext.Provider value={{ openSidebar: () => setMobileOpen(true), user }}>
-      <div className="flex h-dvh overflow-hidden">
+      <div className="flex h-dvh overflow-hidden pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]">
         <Sidebar
           user={user}
           collapsed={collapsed}

@@ -139,7 +139,10 @@ export function Sidebar({ user, collapsed, onToggleCollapsed, mobileOpen, onClos
           onClick={onCloseMobile}
         />
         <aside
-          className={cn("absolute inset-y-0 left-0 transition-transform", mobileOpen ? "translate-x-0" : "-translate-x-full")}
+          className={cn(
+            "absolute inset-y-0 left-0 bg-surface pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] transition-transform",
+            mobileOpen ? "translate-x-0" : "-translate-x-full",
+          )}
           inert={!mobileOpen}
         >
           {panel}

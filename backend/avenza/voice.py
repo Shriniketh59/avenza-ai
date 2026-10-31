@@ -33,7 +33,7 @@ def speak():
     if len(text) < 2:
         return jsonify(error="Nothing to say."), 400
     try:
-        wav = speech.synthesize(text, data.get("voice"), float(data.get("speed", 1.0)))
+        wav = speech.synthesize(text, data.get("voice"), float(data.get("speed", 1.0)), data.get("language"))
     except speech.SpeechError as exc:
         return jsonify(error=str(exc)), 503
     return Response(wav, mimetype="audio/wav", headers={"Cache-Control": "no-store"})
@@ -43,3 +43,32 @@ def speak():
 @require_auth
 def voices():
     return jsonify(voices=speech.available_voices(), default=current_app.config["DEFAULT_VOICE"])
+
+
+@bp.get("/catalog")
+@require_auth
+def catalog():
+    try:
+        return jsonify(voices=speech.catalog(), default=current_app.config["DEFAULT_VOICE"])
+    except speech.SpeechError as exc:
+        return jsonify(error=str(exc)), 503
+
+
+@bp.post("/voices/<voice_id>")
+@require_auth
+def install(voice_id: str):
+    try:
+        speech.install_voice(voice_id)
+    except speech.SpeechError as exc:
+        return jsonify(error=str(exc)), 400
+    return jsonify(ok=True), 202
+
+
+@bp.delete("/voices/<voice_id>")
+@require_auth
+def remove(voice_id: str):
+    try:
+        speech.remove_voice(voice_id)
+    except speech.SpeechError as exc:
+        return jsonify(error=str(exc)), 400
+    return jsonify(ok=True)

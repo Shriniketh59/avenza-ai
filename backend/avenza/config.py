@@ -28,6 +28,8 @@ class Config:
                     "accurate": os.environ.get("IMAGE_MODEL", "gemini-3-pro-image")}
     IMAGE_BASE_URL = os.environ.get("IMAGE_BASE_URL", "https://generativelanguage.googleapis.com/v1beta").rstrip("/")
     IMAGES_PATH = os.environ.get("IMAGES_PATH", str(ROOT / "instance" / "images"))
+    # Generated documents (.docx / .pdf), one folder per user.
+    FILES_PATH = os.environ.get("FILES_PATH", str(ROOT / "instance" / "files"))
     # --- Usage limits (per account, counted in weighted tokens) ---
     # Like Claude: a rolling 5-hour session limit plus a weekly limit that resets every Monday 00:00 UTC.
     USAGE_SESSION_HOURS = float(os.environ.get("USAGE_SESSION_HOURS", "5"))
@@ -121,8 +123,18 @@ class Config:
     # Minimum reader confidence for a spoken answer span.
     QA_MIN_SCORE = float(os.environ.get("QA_MIN_SCORE", "0.25"))
     # --- Voice (local speech-to-text + text-to-speech) ---
-    WHISPER_MODEL = os.environ.get("WHISPER_MODEL", "base")  # tiny | base | small (more accurate, slower)
+    # small: measured 2026-10-25 on this CPU, ~2 s per question and far fewer misheard words than base
+    # (base: "home loan EMI" -> "home loan, either Bye"). tiny | base | small | medium (slower still).
+    WHISPER_MODEL = os.environ.get("WHISPER_MODEL", "small")
     WHISPER_DIR = os.environ.get("WHISPER_DIR", str(ROOT / "instance" / "whisper"))
     VOICES_DIR = os.environ.get("VOICES_DIR", str(ROOT / "instance" / "voices"))
     DEFAULT_VOICE = os.environ.get("DEFAULT_VOICE", "en_US-lessac-medium")
     VOICE_MAX_AUDIO_MB = int(os.environ.get("VOICE_MAX_AUDIO_MB", "10"))
+    # Loudness boost for spoken replies (soft compression, see speech._louder); 1 = off.
+    VOICE_BOOST = float(os.environ.get("VOICE_BOOST", "2.5"))
+    # --- GitHub (skill imports and the GitHub plugin) ---
+    # Optional: without a token GitHub allows 60 API requests an hour per IP; with one, 5,000.
+    GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN", "")
+    # Optional: book details from Google Books for camera-scanned covers (its keyless quota is usually used up;
+    # Open Library and Project Gutenberg need no key).
+    GOOGLE_BOOKS_API_KEY = os.environ.get("GOOGLE_BOOKS_API_KEY", "")

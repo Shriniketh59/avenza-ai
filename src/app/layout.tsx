@@ -11,9 +11,14 @@ const mono = JetBrains_Mono({ variable: "--font-mono-face", subsets: ["latin"] }
 export const metadata: Metadata = {
   title: { default: "AVENZA AI", template: "%s · AVENZA AI" },
   description: "AVENZA AI — agentic intelligence for modern finance.",
+  // iPhone "Add to Home Screen": opens full screen with its own icon and name, like an installed app.
+  appleWebApp: { capable: true, title: "AVENZA", statusBarStyle: "black-translucent" },
+  icons: { apple: "/apple-touch-icon.png" },
 };
 
 export const viewport: Viewport = {
+  // Draw under the notch and home bar; layouts pad themselves with the safe-area insets.
+  viewportFit: "cover",
   themeColor: [
     { media: "(prefers-color-scheme: dark)", color: "#070f24" },
     { media: "(prefers-color-scheme: light)", color: "#f5f7fb" },

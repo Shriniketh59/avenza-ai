@@ -71,6 +71,8 @@ export interface ChatRequest {
   memory?: boolean;
   webSearch?: boolean;
   mode?: ModelId;
+  /** Language name to reply in ("Hindi"), or "auto" for the language of the message. */
+  language?: string;
   /** Spoken conversation: ask for short, speakable answers. */
   voice?: boolean;
   /** Images for the vision model (JPEG data URLs) from the latest message that has them. */

@@ -13,6 +13,7 @@ const chatSchema = z.object({
   memory: z.boolean().optional(),
   webSearch: z.boolean().optional(),
   mode: z.enum(["flash", "plus"]).optional(),
+  language: z.string().max(40).optional(),
   voice: z.boolean().optional(),
   images: z.array(z.string().startsWith("data:image/").max(6_000_000)).max(4).optional(),
   files: z.array(z.string().min(1).max(64)).max(20).optional(),

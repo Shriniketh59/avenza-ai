@@ -4,10 +4,14 @@ gunicorn==26.2.0
 PyJWT==2.15.1
 requests==2.34.2
 python-dotenv==1.2.4
+# SKILL.md frontmatter (skill imports)
+PyYAML==6.0.3
 chromadb==1.5.9
 pypdf==6.19.0
 python-docx==1.2.0
 python-pptx==1.0.2
+# PDF export of generated documents
+fpdf2==2.8.9
 pypdfium2==5.14.0
 openpyxl==3.1.5
 ddgs==9.16.0
@@ -16,6 +20,8 @@ feedparser==6.0.14
 faster-whisper==1.2.1
 av==15.1.0
 piper-tts==1.8.0
+# Japanese voices (Piper reads Japanese through OpenJTalk)
+pyopenjtalk==0.4.1
 # Used directly by the local NLP models (reranker + extractive QA)
 onnxruntime==1.30.0
 tokenizers==0.23.2

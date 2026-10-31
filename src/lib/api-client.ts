@@ -83,12 +83,52 @@ export const documentsApi = {
   },
 };
 
+export interface ScanPageResult {
+  /** added: read and stored; duplicate: a page already captured; empty: nothing readable. */
+  status: "added" | "duplicate" | "empty";
+  page?: number;
+  kind?: "page" | "cover" | "object";
+  title?: string;
+  preview?: string;
+  /** A photographed book cover that was identified: fullText = the whole book was loaded (public domain). */
+  book?: { title: string; authors: string[]; fullText: boolean; characters: number; source: string } | null;
+  error?: string;
+  document?: UploadedDocument;
+}
+
+/** Live camera scans: pages (or views of an object) read one by one into one document. */
+export const scansApi = {
+  create: (title?: string) => request<{ document: UploadedDocument }>("/api/scans", { method: "POST", body: JSON.stringify({ title }) }),
+  async addPage(scanId: string, photo: Blob): Promise<ScanPageResult> {
+    const form = new FormData();
+    form.append("image", photo, "photo.jpg");
+    let res: Response;
+    try {
+      res = await fetch(`/api/scans/${encodeURIComponent(scanId)}/pages`, { method: "POST", body: form });
+    } catch {
+      throw new ApiError("Network error while sending the photo.", 0);
+    }
+    const body = (await res.json().catch(() => ({}))) as ScanPageResult;
+    if (!res.ok) throw new ApiError(body.error ?? "Could not read the photo.", res.status);
+    return body;
+  },
+};
+
 export const skillsApi = {
   list: () => request<{ skills: Skill[] }>("/api/skills"),
   create: (input: SkillInput) => request<{ skill: Skill }>("/api/skills", { method: "POST", body: JSON.stringify(input) }),
   update: (id: string, input: Partial<SkillInput>) =>
     request<{ skill: Skill }>(`/api/skills/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(input) }),
   remove: (id: string) => request<{ ok: true }>(`/api/skills/${encodeURIComponent(id)}`, { method: "DELETE" }),
+  setEnabled: (id: string, enabled: boolean) =>
+    request<{ skill: Skill }>(`/api/skills/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify({ enabled }) }),
+  /** From a GitHub link (one SKILL.md, a folder, or a whole repository) or the text of a SKILL.md file. */
+  importSkills: (source: { url: string } | { content: string }) =>
+    request<{ skills: Skill[] }>("/api/skills/import", { method: "POST", body: JSON.stringify(source) }),
+  refresh: (id: string) =>
+    request<{ skill: Skill; changed: boolean }>(`/api/skills/${encodeURIComponent(id)}/refresh`, { method: "POST" }),
+  generate: (prompt: string) =>
+    request<{ draft: SkillInput }>("/api/skills/generate", { method: "POST", body: JSON.stringify({ prompt }) }),
 };
 
 export const pluginsApi = {

@@ -1,6 +1,23 @@
 "use client";
 
-import { Database, FileStack, Gauge, LogOut, MessageSquare, Mic, Monitor, Moon, Palette, Plug, RefreshCw, Sparkles, Sun, UserRound } from "lucide-react";
+import {
+  Database,
+  Download,
+  FileStack,
+  Gauge,
+  LogOut,
+  MessageSquare,
+  Mic,
+  Monitor,
+  Moon,
+  Palette,
+  Plug,
+  RefreshCw,
+  Sparkles,
+  Sun,
+  Trash2,
+  UserRound,
+} from "lucide-react";
 import { useTheme } from "next-themes";
 import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -8,9 +25,10 @@ import { useMounted } from "@/hooks/use-mounted";
 import { usePreferences } from "@/hooks/use-preferences";
 import { useSignOut } from "@/hooks/use-sign-out";
 import { MODELS } from "@/config/features";
+import { LANGUAGES, SPEECH_LANGUAGES, languageLabel } from "@/config/languages";
 import { ApiError, isPreviewMode, memoryApi, usageApi } from "@/lib/api-client";
 import { cn } from "@/lib/utils";
-import { voiceApi, type VoiceOption } from "@/lib/voice-api";
+import { voiceApi, type CatalogVoice, type VoiceOption } from "@/lib/voice-api";
 import type { UsageLimit, UsageSummary } from "@/types/usage";
 import { useShell } from "../workspace-shell";
 import { DocumentsPanel } from "./documents-panel";
@@ -36,20 +54,9 @@ const THEMES = [
   { id: "system", label: "System", icon: Monitor },
 ] as const;
 
-const SPEECH_LANGS = [
-  { id: "auto", label: "Detect automatically" },
-  { id: "en", label: "English" },
-  { id: "hi", label: "Hindi" },
-  { id: "ta", label: "Tamil" },
-  { id: "te", label: "Telugu" },
-  { id: "kn", label: "Kannada" },
-  { id: "ml", label: "Malayalam" },
-  { id: "mr", label: "Marathi" },
-  { id: "bn", label: "Bengali" },
-  { id: "es", label: "Spanish" },
-  { id: "fr", label: "French" },
-  { id: "de", label: "German" },
-];
+
+const selectCls =
+  "h-9 max-w-full rounded-lg border border-border bg-surface-2 px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
 export function SettingsView() {
   const [tab, setTab] = useState<Tab>("general");
@@ -99,30 +106,49 @@ export function SettingsView() {
 function GeneralTab() {
   const { theme, setTheme } = useTheme();
   const mounted = useMounted();
+  const [prefs, update] = usePreferences();
   return (
-    <SettingsSection title="Appearance">
-      <div role="radiogroup" aria-label="Theme" className="grid grid-cols-3 gap-2">
-        {THEMES.map((t) => {
-          const active = mounted && theme === t.id;
-          return (
-            <button
-              key={t.id}
-              type="button"
-              role="radio"
-              aria-checked={active}
-              onClick={() => setTheme(t.id)}
-              className={cn(
-                "flex flex-col items-center gap-2 rounded-xl border px-3 py-4 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                active ? "border-accent bg-accent/10 text-foreground" : "border-border text-muted hover:bg-surface-2",
-              )}
-            >
-              <t.icon className="size-5" aria-hidden />
-              {t.label}
-            </button>
-          );
-        })}
-      </div>
-    </SettingsSection>
+    <>
+      <SettingsSection title="Language" description="Saved on this device.">
+        <SettingRow
+          label="Reply language"
+          description="AVENZA writes and speaks its answers in this language. Automatic replies in the language you write or speak in."
+          control={
+            <select aria-label="Reply language" value={prefs.replyLanguage} onChange={(e) => update({ replyLanguage: e.target.value })} className={selectCls}>
+              <option value="auto">Automatic (same as my message)</option>
+              {LANGUAGES.map((l) => (
+                <option key={l.code} value={l.code}>
+                  {languageLabel(l)}
+                </option>
+              ))}
+            </select>
+          }
+        />
+      </SettingsSection>
+      <SettingsSection title="Appearance">
+        <div role="radiogroup" aria-label="Theme" className="grid grid-cols-3 gap-2">
+          {THEMES.map((t) => {
+            const active = mounted && theme === t.id;
+            return (
+              <button
+                key={t.id}
+                type="button"
+                role="radio"
+                aria-checked={active}
+                onClick={() => setTheme(t.id)}
+                className={cn(
+                  "flex flex-col items-center gap-2 rounded-xl border px-3 py-4 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                  active ? "border-accent bg-accent/10 text-foreground" : "border-border text-muted hover:bg-surface-2",
+                )}
+              >
+                <t.icon className="size-5" aria-hidden />
+                {t.label}
+              </button>
+            );
+          })}
+        </div>
+      </SettingsSection>
+    </>
   );
 }
 
@@ -137,25 +163,61 @@ function ChatTab() {
   );
 }
 
+/** A sample sentence in the voice's own language, for the Test button. */
+const SAMPLES: Record<string, string> = {
+  en: "Hello, I'm AVENZA AI. This is how I sound.",
+  hi: "नमस्ते, मैं AVENZA AI हूँ। मेरी आवाज़ ऐसी है।",
+  es: "Hola, soy AVENZA AI. Así suena mi voz.",
+  fr: "Bonjour, je suis AVENZA AI. Voici ma voix.",
+  de: "Hallo, ich bin AVENZA AI. So klinge ich.",
+  it: "Ciao, sono AVENZA AI. Questa è la mia voce.",
+  pt: "Olá, eu sou a AVENZA AI. É assim que eu falo.",
+  ru: "Здравствуйте, я AVENZA AI. Так звучит мой голос.",
+  ar: "مرحبا، أنا AVENZA AI. هكذا يبدو صوتي.",
+  zh: "你好，我是 AVENZA AI。这是我的声音。",
+  ja: "こんにちは、AVENZA AIです。これが私の声です。",
+  ko: "안녕하세요, 저는 AVENZA AI입니다. 제 목소리는 이렇습니다.",
+  tr: "Merhaba, ben AVENZA AI. Sesim böyle.",
+  te: "నమస్కారం, నేను AVENZA AI. నా గొంతు ఇలా ఉంటుంది.",
+  ml: "നമസ്കാരം, ഞാൻ AVENZA AI ആണ്. എന്റെ ശബ്ദം ഇങ്ങനെയാണ്.",
+  mr: "नमस्कार, मी AVENZA AI आहे. माझा आवाज असा आहे.",
+  bn: "নমস্কার, আমি AVENZA AI। আমার কণ্ঠ এমন।",
+  ur: "السلام علیکم، میں AVENZA AI ہوں۔ میری آواز ایسی ہے۔",
+  ne: "नमस्ते, म AVENZA AI हुँ। मेरो आवाज यस्तो छ।",
+  id: "Halo, saya AVENZA AI. Beginilah suara saya.",
+};
+const family = (locale: string) => locale.split(/[-_]/)[0];
+
+async function play(text: string, opts: { voice?: string; speed: number; language?: string }) {
+  const blob = await voiceApi.speak(text, opts);
+  const url = URL.createObjectURL(blob);
+  const audio = new Audio(url);
+  audio.onended = () => URL.revokeObjectURL(url);
+  await audio.play();
+}
+
 function VoiceTab() {
   const [prefs, update] = usePreferences();
   const [voices, setVoices] = useState<VoiceOption[]>([]);
   const [testing, setTesting] = useState(false);
-  const selectCls = "h-9 rounded-lg border border-border bg-surface-2 px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
-
-  useEffect(() => {
+  const reload = useCallback(() => {
     if (isPreviewMode()) return;
     voiceApi.voices().then((r) => setVoices(r.voices)).catch(() => {});
   }, []);
 
+  useEffect(reload, [reload]);
+
+  // Voices grouped by language for the picker.
+  const groups = new Map<string, VoiceOption[]>();
+  for (const v of voices) groups.set(v.languageName, [...(groups.get(v.languageName) ?? []), v]);
+  const picked = voices.find((v) => v.id === prefs.ttsVoice);
+  const replyLang = prefs.replyLanguage !== "auto" ? prefs.replyLanguage : undefined;
+
   async function testVoice() {
     setTesting(true);
     try {
-      const blob = await voiceApi.speak("Hello, I'm AVENZA AI. This is how I sound.", { voice: prefs.ttsVoice, speed: prefs.ttsSpeed });
-      const url = URL.createObjectURL(blob);
-      const audio = new Audio(url);
-      audio.onended = () => URL.revokeObjectURL(url);
-      await audio.play();
+      const lang = picked ? family(picked.language) : (replyLang ?? "en");
+      await play(SAMPLES[lang] ?? SAMPLES.en, { voice: prefs.ttsVoice, speed: prefs.ttsSpeed, language: lang });
     } catch {
       /* backend offline: button simply does nothing */
     } finally {
@@ -164,55 +226,212 @@ function VoiceTab() {
   }
 
   return (
-    <SettingsSection title="Voice" description="Speech recognition (Whisper) and the voice (Piper) both run on this computer. Nothing is sent to the cloud.">
-      <SettingRow
-        label="Speech language"
-        description="Language you speak in. Auto-detect works for most languages."
-        control={
-          <select aria-label="Speech language" value={prefs.speechLanguage} onChange={(e) => update({ speechLanguage: e.target.value })} className={selectCls}>
-            {SPEECH_LANGS.map((l) => (
-              <option key={l.id} value={l.id}>
-                {l.label}
-              </option>
-            ))}
-          </select>
-        }
-      />
-      <SettingRow
-        label="Assistant voice"
-        control={
-          <div className="flex items-center gap-2">
-            <select aria-label="Assistant voice" value={prefs.ttsVoice} onChange={(e) => update({ ttsVoice: e.target.value })} className={selectCls}>
-              <option value="">Default</option>
-              {voices.map((v) => (
-                <option key={v.id} value={v.id}>
-                  {v.name} ({v.language})
+    <>
+      <SettingsSection title="Voice" description="Speech recognition (Whisper) and the voices (Piper) both run on this computer. Nothing is sent to the cloud.">
+        <SettingRow
+          label="Speech language"
+          description={`Language you speak in. Auto-detect works for most languages; Whisper understands ${SPEECH_LANGUAGES.length}.`}
+          control={
+            <select aria-label="Speech language" value={prefs.speechLanguage} onChange={(e) => update({ speechLanguage: e.target.value })} className={selectCls}>
+              <option value="auto">Detect automatically</option>
+              {SPEECH_LANGUAGES.map((l) => (
+                <option key={l.code} value={l.code}>
+                  {languageLabel(l)}
                 </option>
               ))}
             </select>
-            <Button variant="outline" size="sm" onClick={testVoice} disabled={testing}>
-              {testing ? "Playing…" : "Test"}
-            </Button>
-          </div>
-        }
-      />
-      <SettingRow
-        label="Speaking speed"
-        description={`${prefs.ttsSpeed.toFixed(1)}×`}
-        control={
+          }
+        />
+        <SettingRow
+          label="Assistant voice"
+          description="Automatic speaks each reply with an installed voice of its language. A voice you pick is used for its own language."
+          control={
+            <div className="flex items-center gap-2">
+              <select aria-label="Assistant voice" value={prefs.ttsVoice} onChange={(e) => update({ ttsVoice: e.target.value })} className={selectCls}>
+                <option value="">Automatic (matches the language)</option>
+                {[...groups].map(([lang, list]) => (
+                  <optgroup key={lang} label={lang}>
+                    {list.map((v) => (
+                      <option key={v.id} value={v.id}>
+                        {v.name}
+                        {v.country ? ` · ${v.country}` : ""} ({v.quality})
+                      </option>
+                    ))}
+                  </optgroup>
+                ))}
+              </select>
+              <Button variant="outline" size="sm" onClick={testVoice} disabled={testing}>
+                {testing ? "Playing…" : "Test"}
+              </Button>
+            </div>
+          }
+        />
+        <SettingRow
+          label="Speaking speed"
+          description={`${prefs.ttsSpeed.toFixed(1)}×`}
+          control={
+            <input
+              type="range"
+              aria-label="Speaking speed"
+              min={0.7}
+              max={1.6}
+              step={0.1}
+              value={prefs.ttsSpeed}
+              onChange={(e) => update({ ttsSpeed: Number(e.target.value) })}
+              className="w-40 accent-[var(--accent)]"
+            />
+          }
+        />
+        <SettingRow label="Send after dictation" description="In the message box, send as soon as you stop speaking." control={<Switch label="Send after dictation" checked={prefs.autoSendVoice} onChange={(v) => update({ autoSendVoice: v })} />} />
+      </SettingsSection>
+      <VoiceLibrary onChange={reload} speed={prefs.ttsSpeed} />
+    </>
+  );
+}
+
+/** Piper's full voice catalog: install any voice (about 60 MB each), try it, remove it. */
+function VoiceLibrary({ onChange, speed }: { onChange: () => void; speed: number }) {
+  const [catalog, setCatalog] = useState<CatalogVoice[] | null>(null);
+  const [defaultVoice, setDefaultVoice] = useState("");
+  const [query, setQuery] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [playing, setPlaying] = useState<string | null>(null);
+  const preview = isPreviewMode();
+
+  const load = useCallback(
+    () =>
+      voiceApi
+        .catalog()
+        .then((r) => {
+          setCatalog(r.voices);
+          setDefaultVoice(r.default);
+          setError(null);
+          return r.voices;
+        })
+        .catch((e) => {
+          setError(e instanceof ApiError ? e.message : "Could not load the voice library.");
+          return null;
+        }),
+    [],
+  );
+
+  useEffect(() => {
+    if (!preview) void load();
+  }, [load, preview]);
+
+  // While a download runs, refresh its progress; tell the picker when it finishes.
+  const installing = catalog?.some((v) => v.state === "installing");
+  useEffect(() => {
+    if (!installing) return;
+    const t = setInterval(async () => {
+      const list = await load();
+      if (list && !list.some((v) => v.state === "installing")) onChange();
+    }, 1500);
+    return () => clearInterval(t);
+  }, [installing, load, onChange]);
+
+  if (preview) return null;
+
+  const q = query.trim().toLowerCase();
+  const shown = (catalog ?? []).filter(
+    (v) => !q || `${v.languageName} ${v.nativeName} ${v.country} ${v.name} ${v.language}`.toLowerCase().includes(q),
+  );
+  const installedCount = catalog?.filter((v) => v.state === "installed").length ?? 0;
+  const languageCount = new Set(catalog?.map((v) => v.languageName)).size;
+
+  return (
+    <SettingsSection
+      title="Voice library"
+      description={
+        catalog
+          ? `${catalog.length} voices in ${languageCount} languages. ${installedCount} installed. Each voice is about 60 MB and runs offline once installed.`
+          : "Every Piper voice, ready to install."
+      }
+    >
+      {error && <p className="pb-3 text-sm text-danger">{error}</p>}
+      {catalog === null && !error && <p className="text-sm text-muted">Loading…</p>}
+      {catalog && (
+        <div className="space-y-2 pb-3">
           <input
-            type="range"
-            aria-label="Speaking speed"
-            min={0.7}
-            max={1.6}
-            step={0.1}
-            value={prefs.ttsSpeed}
-            onChange={(e) => update({ ttsSpeed: Number(e.target.value) })}
-            className="w-40 accent-[var(--accent)]"
+            type="search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search a language, country or voice (e.g. Hindi, Español, Brazil)"
+            aria-label="Search voices"
+            className="h-9 w-full rounded-lg border border-border bg-surface-2 px-3 text-sm placeholder:text-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           />
-        }
-      />
-      <SettingRow label="Send after dictation" description="In the message box, send as soon as you stop speaking." control={<Switch label="Send after dictation" checked={prefs.autoSendVoice} onChange={(v) => update({ autoSendVoice: v })} />} />
+          <ul className="max-h-[28rem] divide-y divide-border overflow-y-auto rounded-lg border border-border">
+            {shown.length === 0 && <li className="px-3 py-3 text-sm text-muted">No voice matches “{query}”.</li>}
+            {shown.map((v) => (
+              <li key={v.id} className="flex flex-wrap items-center gap-2 px-3 py-2">
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium">
+                    {v.languageName}
+                    {v.nativeName && v.nativeName !== v.languageName ? ` · ${v.nativeName}` : ""} — {v.name}
+                  </p>
+                  <p className="text-xs text-muted">
+                    {v.country} · {v.quality} quality{v.speakers > 1 ? ` · ${v.speakers} speakers` : ""} · {v.sizeMb} MB
+                    {v.id === defaultVoice ? " · default" : ""}
+                    {v.state === "error" && v.error ? ` · ${v.error}` : ""}
+                  </p>
+                </div>
+                {v.state === "installed" ? (
+                  <div className="flex items-center gap-1">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={playing === v.id}
+                      onClick={async () => {
+                        setPlaying(v.id);
+                        const lang = family(v.language);
+                        await play(SAMPLES[lang] ?? SAMPLES.en, { voice: v.id, speed, language: lang }).catch(() => {});
+                        setPlaying(null);
+                      }}
+                    >
+                      {playing === v.id ? "Playing…" : "Try"}
+                    </Button>
+                    {v.id !== defaultVoice && (
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        aria-label={`Remove ${v.languageName} voice ${v.name}`}
+                        onClick={async () => {
+                          try {
+                            await voiceApi.remove(v.id);
+                            await load();
+                            onChange();
+                          } catch (e) {
+                            setError(e instanceof ApiError ? e.message : "Could not remove the voice.");
+                          }
+                        }}
+                      >
+                        <Trash2 />
+                      </Button>
+                    )}
+                  </div>
+                ) : v.state === "installing" ? (
+                  <span className="text-xs tabular-nums text-muted">Installing… {v.progress}%</span>
+                ) : (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={async () => {
+                      try {
+                        await voiceApi.install(v.id);
+                        await load();
+                      } catch (e) {
+                        setError(e instanceof ApiError ? e.message : "Could not install the voice.");
+                      }
+                    }}
+                  >
+                    <Download /> {v.state === "error" ? "Retry" : "Install"}
+                  </Button>
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
     </SettingsSection>
   );
 }

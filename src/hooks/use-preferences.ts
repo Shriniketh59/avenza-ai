@@ -9,7 +9,9 @@ export interface Preferences {
   compactMessages: boolean;
   /** Whisper language code, or "auto" to detect. */
   speechLanguage: string;
-  /** Piper voice id; "" = server default. */
+  /** Language code AVENZA replies in (src/config/languages.ts), or "auto" = the language of the message. */
+  replyLanguage: string;
+  /** Piper voice id; "" = automatic (a voice of the reply's language, else the server default). */
   ttsVoice: string;
   ttsSpeed: number;
   autoSendVoice: boolean;
@@ -29,6 +31,7 @@ const DEFAULTS: Preferences = {
   autoScroll: true,
   compactMessages: false,
   speechLanguage: "auto",
+  replyLanguage: "auto",
   ttsVoice: "",
   ttsSpeed: 1,
   autoSendVoice: false,

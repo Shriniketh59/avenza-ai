@@ -62,9 +62,9 @@ export function AgentSelector() {
     if (!open || isPreviewMode()) return;
     skillsApi
       .list()
-      .then((r) => setSkills(r.skills))
+      .then((r) => setSkills(r.skills.filter((s) => s.enabled || s.id === prefs.skill)))
       .catch(() => {});
-  }, [open]);
+  }, [open, prefs.skill]);
 
   return (
     <div ref={ref} className="relative">
@@ -130,8 +130,8 @@ export function AgentSelector() {
                     close();
                   }}
                   icon={CircleSlash}
-                  name="No skill"
-                  hint="Answer normally (a skill named in a message still applies)"
+                  name="Automatic"
+                  hint="Uses a skill when its description fits the message, or when you name it"
                 />
                 {skills.map((s) => (
                   <Option
