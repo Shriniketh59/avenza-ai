@@ -36,6 +36,12 @@ PLUGINS = {
         "description": "Exact arithmetic for expressions like 2450 * 1.18 or (1 + 0.08)^5.",
         "source": "AVENZA calculator",
     },
+    "loan": {
+        "name": "Loan EMI",
+        "description": "Exact monthly EMI, total interest and total payment for a loan, e.g. a home loan of "
+                       "20 lakh at 9% for 20 years.",
+        "source": "AVENZA calculator",
+    },
     "github": {
         "name": "GitHub",
         "description": "Live facts on public repositories: stars, forks, issues, latest release, license and README. "
@@ -92,6 +98,34 @@ _GH_HINT = re.compile(r"\b(github|repo|repository|stars?|forks?|release)\b", re.
 _GH_NAME = re.compile(r"\b(?:github\s+(?:repo(?:sitory)?\s+)?(?:of|for)\s+|(?:repo(?:sitory)?|github)\s+(?:of|for)\s+)"
                       r"(?P<name>[\w.\- ]{2,40}?)\s*[?.!]*$|^\s*(?P<name2>[\w.\-]{2,40})\s+(?:github|repo)\s*[?.!]*$", re.I)
 
+_LOAN_HINT = re.compile(r"\b(emi|emis|loan|mortgage|instal+ment)\b", re.I)
+_UNIT = {"lakh": 1e5, "lakhs": 1e5, "lac": 1e5, "lacs": 1e5, "l": 1e5, "crore": 1e7, "crores": 1e7, "cr": 1e7,
+         "k": 1e3, "thousand": 1e3, "million": 1e6, "mn": 1e6, "m": 1e6, "billion": 1e9, "bn": 1e9}
+_AMOUNT = re.compile(r"(?P<cur>₹|rs\.?|inr|\$|usd)?\s*(?P<num>\d[\d,]*(?:\.\d+)?)\s*(?P<unit>lakhs?|lacs?|crores?|cr|"
+                     r"thousand|million|billion|mn|bn|k|l|m)?\b(?!\s*(?:%|percent|per cent|years?|yrs?|months?|mos?)\b)", re.I)
+_RATE = re.compile(r"(\d+(?:\.\d+)?)\s*(?:%|percent|per cent)", re.I)
+_TERM = re.compile(r"(\d+(?:\.\d+)?)\s*(years?|yrs?|months?|mos?)\b", re.I)
+
+
+def _loan_args(q: str) -> dict | None:
+    """Principal, yearly rate and months from "home loan of 20 lakh at 9% for 20 years"; None if any is missing."""
+    rate, term = _RATE.search(q), _TERM.search(q)
+    if not (_LOAN_HINT.search(q) and rate and term):
+        return None
+    months = float(term[1]) * (12 if term[2].lower().startswith("y") else 1)
+    amounts = []
+    for m in _AMOUNT.finditer(q):
+        if rate.start() <= m.start() < rate.end() or term.start() <= m.start() < term.end():
+            continue
+        value = float(m["num"].replace(",", "")) * _UNIT.get((m["unit"] or "").lower(), 1)
+        amounts.append(value)
+    principal = max(amounts, default=0)
+    if principal < 1000 or not 0 < months <= 600 or not 0 <= float(rate[1]) < 60:
+        return None
+    return {"principal": principal, "rate": float(rate[1]), "months": round(months),
+            "currency": "USD" if re.search(r"\$|usd|dollar", q, re.I) else "INR"}
+
+
 _CALC_HINT = re.compile(r"^\s*(calculate|compute|what is|what's|evaluate|solve)?\s*[(\d.]", re.I)
 _EXPR = re.compile(r"[\d.\s+\-*/×÷^%(),]+")
 
@@ -131,6 +165,10 @@ def detect(question: str, enabled: set[str]) -> list[tuple[str, dict]]:
                                                  r"what|why|how|invest|portfolio|this|that|these|those|their|its)\b", name, re.I):
                 calls.append(("stocks", {"name": name}))
                 break
+    if "loan" in enabled and not calls:
+        args = _loan_args(q)
+        if args:
+            calls.append(("loan", args))
     if "github" in enabled and not calls:
         m = _GH_URL.search(q) or (_GH_HINT.search(q) and _GH_SLUG.search(q))
         if m:
@@ -261,6 +299,29 @@ def calculator(expr: str) -> dict | None:
     return _item("calculator", "Calculation", f"{expr.strip()} = {shown}")
 
 
+def _inr(x: float) -> str:
+    """Indian digit grouping: 4318685 -> 43,18,685."""
+    whole = f"{round(x):d}"
+    head, tail = whole[:-3], whole[-3:]
+    while len(head) > 2:
+        tail = f"{head[-2:]},{tail}"
+        head = head[:-2]
+    return f"{head},{tail}" if head else tail
+
+
+def loan(principal: float, rate: float, months: int, currency: str = "INR") -> dict | None:
+    r = rate / 12 / 100
+    emi = principal / months if r == 0 else principal * r * (1 + r) ** months / ((1 + r) ** months - 1)
+    total = emi * months
+    money = (lambda x: f"₹{_inr(x)}") if currency == "INR" else (lambda x: f"${x:,.0f}")
+    years = f"{months / 12:g} years" if months % 12 == 0 else f"{months} months"
+    text = (f"Loan of {money(principal)} at {rate:g}% a year for {years} ({months} monthly payments): "
+            f"EMI {money(emi)} a month; total interest {money(total - principal)}; total paid {money(total)}. "
+            f"Formula: EMI = P × r × (1 + r)^n / ((1 + r)^n − 1), with P = {money(principal)}, r = {rate:g}% / 12 "
+            f"= {r:.6f} a month and n = {months}. Assumes a fixed rate and equal monthly payments (reducing balance).")
+    return _item("loan", "Loan EMI", text)
+
+
 def github_repo(owner: str | None = None, repo: str | None = None, search: str | None = None) -> dict | None:
     from . import github
 
@@ -277,10 +338,12 @@ def github_repo(owner: str | None = None, repo: str | None = None, search: str |
     return _item("github", f"GitHub · {info['title']}", text, info["url"])
 
 
-_RUN = {"currency": currency, "weather": weather, "stocks": stock, "calculator": calculator, "github": github_repo}
+_RUN = {"currency": currency, "weather": weather, "stocks": stock, "calculator": calculator, "github": github_repo,
+        "loan": loan}
 _ARGS = {"currency": lambda a: (a["src"], a["dst"], a["amount"]), "weather": lambda a: (a["place"],),
          "stocks": lambda a: (a["name"],), "calculator": lambda a: (a["expr"],),
-         "github": lambda a: (a.get("owner"), a.get("repo"), a.get("search"))}
+         "github": lambda a: (a.get("owner"), a.get("repo"), a.get("search")),
+         "loan": lambda a: (a["principal"], a["rate"], a["months"], a["currency"])}
 
 
 def run(pid: str, args: dict) -> dict | None:

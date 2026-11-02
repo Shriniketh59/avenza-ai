@@ -40,7 +40,7 @@ function SkillForm({ initial, onSave, onCancel }: { initial: SkillInput; onSave:
       </label>
       <label className="block space-y-1">
         <span className="text-sm font-medium">Description</span>
-        <input className={fieldCls} maxLength={300} value={value.description} onChange={(e) => setValue({ ...value, description: e.target.value })} placeholder="What it does and when to use it (AVENZA picks skills by this)" />
+        <input className={fieldCls} maxLength={1024} value={value.description} onChange={(e) => setValue({ ...value, description: e.target.value })} placeholder="What it does and when to use it (AVENZA picks skills by this)" />
       </label>
       <label className="block space-y-1">
         <span className="text-sm font-medium">Instructions</span>

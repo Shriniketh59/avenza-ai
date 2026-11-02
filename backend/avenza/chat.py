@@ -85,7 +85,8 @@ def chat():
             rf"(?<!\w){re.escape(s['name'])}(?!\w)", question_text, re.I)), None)
     # No skill picked or named: the quick model may choose one by its description (started inside the stream).
     auto_skills = [] if skill is not None or data.get("skillId") else extensions.user_skills(user_id, enabled_only=True)
-    reply_language, reply_code = languages.reply_rule(str(data.get("language") or "auto"), str(history[-1].get("content", "")))
+    language_setting = str(data.get("language") or "auto")
+    reply_language, reply_code = languages.reply_rule(language_setting, str(history[-1].get("content", "")))
     enabled_plugins = extensions.enabled_plugins(user_id)
     question = str(history[-1].get("content", ""))
     rows = get_db().execute(
@@ -97,7 +98,7 @@ def chat():
 
     @stream_with_context
     def generate():
-        nonlocal skill  # may be chosen by its description below
+        nonlocal skill, reply_language, reply_code  # chosen again once the message is understood
         if reply_code:
             # The language the reply is written in: the app reads it aloud with a voice of that language.
             yield _event({"type": "language", "code": reply_code})
@@ -138,7 +139,7 @@ def chat():
                     yield _event({"type": "token", "value": _download(made, "Here is the previous answer as a file:")})
                 yield _event({"type": "done"})
                 return
-            # Read the message like a person first (typos, shorthand, "it" = earlier topic). Voice stays LLM-free.
+            # Read the message like a person first (typos, shorthand, "it" = earlier topic, misheard words).
             understood = None
             simple = memorable or analysis.intent == "smalltalk" or nlp.CLOCK.search(question)
             # The web search starts right away with the message as written, in parallel with the rewrite below;
@@ -147,7 +148,7 @@ def chat():
             if use_web and analysis.needs_web and not voice and not simple and not images and not files_now:
                 early_web = start_web(query)
             # Plugins (stocks, currency, weather, calculator) start at once too; their data becomes a cited source.
-            plugin_calls = [] if voice or simple or images or doc_req else plugins.detect(question, enabled_plugins)
+            plugin_calls = [] if simple or images or doc_req else plugins.detect(question, enabled_plugins)
 
             def run_plugin(pid: str, args: dict):
                 with app.app_context():
@@ -162,13 +163,24 @@ def chat():
             skill_future = pool.submit(run_pick) if auto_skills and not voice and not simple else None
             for pid, _ in plugin_calls:
                 yield _tool(f"plugin-{pid}", "plugin", "running", plugins.PLUGINS[pid]["name"])
-            if not voice and not simple and current_app.config["UNDERSTAND_ENABLED"]:
+            if not simple and current_app.config["UNDERSTAND_ENABLED"]:
                 yield _tool("understand", "understand", "running")
-                understood = understand.understand(history, topic, has_images=bool(images), has_files=files_now)
+                understood = understand.understand(history, topic, has_images=bool(images), has_files=files_now, spoken=voice)
                 if understood:
                     analysis = nlp.analyze_query(understood.question)
                     query = understood.search or understood.question.split("\n\nOriginal message:")[0][:300]
                     yield _tool("understand", "understand", "succeeded", understood.goal or understood.question[:100])
+                    # A language request the raw words hid ("in your tunnel" = "into Tamil", "tamli" = "Tamil").
+                    if languages.requested(understood.question) and not languages.requested(question):
+                        reply_language, reply_code = languages.reply_rule(language_setting, understood.question)
+                        if reply_code:
+                            yield _event({"type": "language", "code": reply_code})
+                    # A calculation or lookup the raw words hid ("either bye" = "EMI").
+                    if not plugin_calls and not images and not doc_req:
+                        plugin_calls = plugins.detect(understood.question, enabled_plugins)
+                        plugin_futures += [pool.submit(run_plugin, pid, args) for pid, args in plugin_calls]
+                        for pid, _ in plugin_calls:
+                            yield _tool(f"plugin-{pid}", "plugin", "running", plugins.PLUGINS[pid]["name"])
                 else:
                     yield _tool("understand", "understand", "failed", "used the question as written")
             if memorable:
@@ -316,7 +328,7 @@ def chat():
                     # Every other spoken question is answered by the fast LLM in a short spoken reply,
                     # grounded on the sources retrieved for it (quoting sentences gave stilted, often wrong answers).
                     voice_agent = agents.VOICE
-                    messages = rag.build_messages(history, items, memories, analysis, pending, False, voice_agent)
+                    messages = rag.build_messages(history, items, memories, analysis, pending, False, voice_agent, understood)
                     messages[0]["content"] += "\n\n" + reply_language
                     for chunk in llm.stream_chat(messages, voice_agent.mode, voice_agent.reasoning):
                         yield _event({"type": "token", "value": chunk})
@@ -354,6 +366,8 @@ def chat():
                     yield _event({"type": "token", "value": chunk})
                 # Flag any figure the model stated that is not in what it was given.
                 evidence = [it["text"] for it in items] + [m["text"] for m in memories] + [str(m.get("content", "")) for m in history]
+                if skill is not None:
+                    evidence.append(skill["instructions"])  # the user's own template (an address, a course code) is a source
                 flagged = factcheck.unsupported_figures("".join(answer), evidence) if agent.factcheck else []
                 if flagged:
                     yield _event({"type": "token", "value": factcheck.warning(flagged, bool(items))})

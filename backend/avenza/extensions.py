@@ -19,7 +19,7 @@ bp = Blueprint("extensions", __name__)
 
 MAX_SKILLS = 30
 MAX_IMPORT = 10  # SKILL.md files taken from one repository link
-_LIMITS = {"name": 60, "description": 300, "instructions": 20000}
+_LIMITS = {"name": 60, "description": 1024, "instructions": 20000}  # description: Claude's limit
 
 
 def _skill_json(row) -> dict:
@@ -47,7 +47,7 @@ def parse_skill_md(text: str) -> dict:
     if re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)+", name):
         name = name.replace("-", " ").capitalize()
     desc = re.sub(r"\s+", " ", str(meta.get("description") or "")).strip()
-    return {"name": name[:60], "description": desc[:300], "instructions": body.strip()[:20000]}
+    return {"name": name[:60], "description": desc[:1024], "instructions": body.strip()[:20000]}
 
 
 def _clean(data: dict, partial: bool) -> tuple[dict, str | None]:

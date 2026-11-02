@@ -1,7 +1,8 @@
 """Understand the question the way a person would before searching or answering.
 
 Users type fast: typos ("wat is rbi repo rte"), shorthand, half sentences, "it"/"that" pointing at
-earlier turns. One quick call to the fast model (minimal thinking, ~1 s) rewrites the message as a
+earlier turns. Spoken messages arrive as speech-recognition transcripts with misheard words ("into Tamil" heard as
+"in your tunnel"), which this step repairs too. One quick call to the fast model (minimal thinking, ~1 s) rewrites the message as a
 clear question, writes a search query, notes the real goal behind it and suggests an agent. It adds
 no facts. If the call fails or is slow, the rule-based path is used unchanged.
 """
@@ -16,6 +17,7 @@ from . import agents, llm
 _PROMPT = """You read a user's latest chat message the way a thoughtful human expert would, so an assistant can answer what they really mean.
 Today is {today}.
 - Fix typos and grammar, expand abbreviations and shorthand (e.g. "qn" = question, "rte" = rate, "pls" = please).
+- Write "question" in the same language the user wrote in (a Hindi message stays Hindi); never translate it.{spoken}
 - Resolve "it", "that", "this", "same" and follow-ups using the earlier turns.
 - Keep the user's meaning, scope and numbers exactly. Never answer the question and never add facts.
 - "search": a concise web search query covering every part of the question that needs facts, or "" if none are needed (maths, coding, writing, chit-chat, questions about attached files or images). Never add a year unless the user gave one.
@@ -34,7 +36,12 @@ class Understanding:
     agent: str | None
 
 
-def understand(history: list[dict], question: str, *, has_images: bool = False, has_files: bool = False) -> Understanding | None:
+_SPOKEN = """
+- The message is a speech-recognition transcript, so some words may be misheard as similar-sounding ones. Restore the words the user most likely said from the sound and the context: e.g. "translate good morning in your tunnel" -> "translate good morning into Tamil", "home loan either bye" -> "home loan EMI", "bahrat ki rajdani" -> "Bharat ki rajdhani". Correct misspelled words in Indian scripts the same way. Change only what is clearly misheard."""
+
+
+def understand(history: list[dict], question: str, *, has_images: bool = False, has_files: bool = False,
+               spoken: bool = False) -> Understanding | None:
     catalog = "; ".join(f"{k} ({v})" for k, v in agents.CATALOG.items())
     earlier = [m for m in history[:-1] if m.get("role") in ("user", "assistant") and m.get("content")][-4:]
     context = "\n".join(f"{m['role']}: {str(m['content'])[:400]}" for m in earlier)
@@ -42,7 +49,8 @@ def understand(history: list[dict], question: str, *, has_images: bool = False, 
     user = (f"Earlier turns:\n{context}\n\n" if context else "") + (f"[The user attached: {attached}]\n" if attached else "")
     user += f"Latest message:\n{question[:2000]}"
     out = llm.quick_json([
-        {"role": "system", "content": _PROMPT.format(today=f"{datetime.now():%d %B %Y}", catalog=catalog)},
+        {"role": "system", "content": _PROMPT.format(today=f"{datetime.now():%d %B %Y}", catalog=catalog,
+                                                     spoken=_SPOKEN if spoken else "")},
         {"role": "user", "content": user},
     ], timeout=current_app.config["UNDERSTAND_TIMEOUT"])
     if not out or not str(out.get("question", "")).strip():

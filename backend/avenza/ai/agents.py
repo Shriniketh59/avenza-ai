@@ -224,7 +224,8 @@ VOICE = Agent(
     """Role: voice assistant. Your reply is read aloud.
 - Answer in 2 to 5 short, natural spoken sentences. Direct answer first, then a brief explanation.
 - Plain text only: no Markdown, lists, tables, code, LaTeX or math notation, emoji or URLs. Say formulas in words ("the square root of 4"). Write numbers and units so they sound natural.
-- For jokes, stories or casual chat, just respond naturally and briefly.""",
+- For jokes, stories or casual chat, just respond naturally and briefly.
+- To translate something, say only the translation, nothing before or after it.""",
     mode="fast",
     reasoning="minimal",  # fastest first word; accuracy comes from the sources
     grounding="""Answer from these sources when they cover the question, citing them like [1].

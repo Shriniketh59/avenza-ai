@@ -54,7 +54,12 @@ def _whisper_model():
 
 
 def transcribe(audio: bytes, language: str | None = None) -> dict:
-    """Return {"text", "language", "duration"} for an audio clip (webm/ogg/wav/mp3...)."""
+    """Return {"text", "language", "duration"} for an audio clip (webm/ogg/wav/mp3...).
+
+    A clip may be read more than once (wrong language detected, a short command clipped); every reading is kept
+    and the one Whisper is most confident in wins. Readings that are hallucinations (measured 2026-11-03 on noisy
+    Hindi: the second pass returned "।।।।।।" and replaced a usable first reading) never win.
+    """
     model = _whisper_model()
     forced = None if not language or language == "auto" else language
     with tempfile.NamedTemporaryFile(suffix=".audio") as tmp:
@@ -62,30 +67,57 @@ def transcribe(audio: bytes, language: str | None = None) -> dict:
         tmp.flush()
         try:
             with _lock:  # CTranslate2 model: one transcription at a time on CPU
-                text, info = _run(model, tmp.name, forced)
+                first = _run(model, tmp.name, forced)
+                readings = [first]
+                info = first[1]
                 # Auto-detect is unreliable on very short clips ("New chat." -> Russian).
                 if not forced and (info.language not in EXPECTED_LANGUAGES or info.language_probability < 0.6):
-                    text, info = _run(model, tmp.name, "en")
+                    readings.append(_run(model, tmp.name, "en"))
                 # Silence trimming can clip the first syllable of one- or two-word commands.
-                if info.duration < 2.5 and len(text.split()) <= 3:
-                    text, info = _run(model, tmp.name, info.language if info.language in EXPECTED_LANGUAGES else "en", vad=False)
+                best = _best(readings)
+                if info.duration < 2.5 and len(best[0].split()) <= 3:
+                    lang = best[1].language if best[1].language in EXPECTED_LANGUAGES else "en"
+                    readings.append(_run(model, tmp.name, lang, vad=False))
         except Exception as exc:
             raise SpeechError("Could not decode the recording.") from exc
+    text, info, _ = _best(readings)
     return {"text": text, "language": info.language, "duration": round(info.duration, 2)}
 
 
-def _run(model, path: str, language: str | None, vad: bool = True):
+def _hallucinated(text: str) -> bool:
+    """Whisper's typical output for noise: symbols or one word repeated ("ॐ ॐ ॐ", "।।।।", "Thank you. Thank you.")."""
+    letters = re.sub(r"[\W\d_]+", "", text)
+    if len(letters) < max(2, len(text.replace(" ", "")) * 0.4):
+        return True
+    words = re.findall(r"\w+", text.lower())
+    sentences = [x.strip() for x in re.split(r"[.!?।]+", text.lower()) if x.strip()]
+    return (len(words) >= 3 and len(set(words)) == 1) or (len(sentences) >= 3 and len(set(sentences)) == 1)
+
+
+def _best(readings: list[tuple]) -> tuple:
+    """The reading with the highest average log probability that is not a hallucination ("" when all are)."""
+    usable = [r for r in readings if r[0] and not _hallucinated(r[0])]
+    if not usable:
+        return "", readings[0][1], float("-inf")
+    return max(usable, key=lambda r: r[2])
+
+
+def _run(model, path: str, language: str | None, vad: bool = True) -> tuple[str, object, float]:
+    """(text, info, average log probability of the words; higher is more confident)."""
     segments, info = model.transcribe(
         path,
         language=language,
         beam_size=5,  # ~0.1 s more than greedy on the small model, fewer misheard words
         vad_filter=vad,
         vad_parameters={"min_silence_duration_ms": 400},
-        # The hint is English: for other forced languages it pulls the transcript toward English words.
-        initial_prompt=VOCAB_HINT if language in (None, "en", "hi") else None,
+        # The hint is English (finance words): for other languages it pulls the transcript toward English words.
+        initial_prompt=VOCAB_HINT if language in (None, "en") else None,
         condition_on_previous_text=False,
     )
-    return " ".join(s.text.strip() for s in segments).strip(), info
+    segments = list(segments)
+    text = " ".join(s.text.strip() for s in segments).strip()
+    logprob = sum(s.avg_logprob * max(1, len(s.text)) for s in segments) / max(1, sum(len(s.text) for s in segments))
+    return text, info, logprob
 
 
 def warm_up(app):
