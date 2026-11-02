@@ -42,3 +42,8 @@ next-env.d.ts
 
 # env template has placeholders only
 !.env.example
+
+# cloudflare (OpenNext build output, wrangler state, local secrets)
+/.open-next
+/.wrangler
+.dev.vars

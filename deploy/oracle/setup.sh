@@ -2,11 +2,14 @@
 # AVENZA AI backend: one-time setup on an Oracle Cloud "Always Free" Ubuntu 24.04 server.
 #
 #   1. Put your backend settings in ~/avenza.env (paste the contents of .env.render from your laptop).
-#   2. Run:  bash setup.sh            (or: DOMAIN=api.example.com bash setup.sh)
+#   2. Run one of:
+#        CF_TUNNEL_TOKEN=<token> bash setup.sh    behind Cloudflare: a Cloudflare Tunnel, no open ports (recommended)
+#        DOMAIN=api.example.com bash setup.sh     HTTPS with Caddy on this server (or no DOMAIN: <ip>.sslip.io)
+#   3. From the laptop, copy the voices: deploy/oracle/sync-voices.sh <user>@<server-ip>
 #
-# It installs the backend in /opt/avenza, keeps its data in /var/data, runs it as a service that restarts
-# on failure and on reboot, and serves it over HTTPS with Caddy. Without DOMAIN it uses <ip>.sslip.io,
-# a free name that points at this server, so HTTPS works with no domain to buy.
+# It installs the backend in /opt/avenza, keeps its data in /var/data and runs it as a service that restarts
+# on failure and on reboot. With CF_TUNNEL_TOKEN the server connects out to Cloudflare, which serves
+# https://api.<your domain> (the public hostname set on the tunnel); nothing listens on the internet.
 # Safe to run again: each step is skipped or refreshed.
 set -euo pipefail
 
@@ -77,6 +80,24 @@ sudo systemctl daemon-reload
 sudo systemctl enable --now avenza-api >/dev/null 2>&1
 sudo systemctl restart avenza-api
 
+if [[ -n "${CF_TUNNEL_TOKEN:-}" ]]; then
+  step "6/6 Cloudflare Tunnel"
+  if ! command -v cloudflared >/dev/null; then
+    ARCH="$(dpkg --print-architecture)"  # arm64 on Oracle's free Ampere servers
+    curl -fsSL -o /tmp/cloudflared.deb "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-$ARCH.deb"
+    sudo dpkg -i /tmp/cloudflared.deb >/dev/null && rm /tmp/cloudflared.deb
+  fi
+  sudo cloudflared service uninstall >/dev/null 2>&1 || true
+  sudo cloudflared service install "$CF_TUNNEL_TOKEN" >/dev/null 2>&1
+  sudo systemctl disable --now caddy >/dev/null 2>&1 || true  # the tunnel replaces it
+  for _ in $(seq 1 60); do curl -fsS -m 3 http://127.0.0.1:5000/health >/dev/null 2>&1 && break; sleep 3; done
+  curl -fsS -m 3 http://127.0.0.1:5000/health >/dev/null || die "The backend did not start. See: journalctl -u avenza-api -n 50"
+  printf '\n\033[32m✓ Backend running behind the Cloudflare Tunnel.\033[0m\n'
+  echo "  The tunnel's public hostname (e.g. https://api.yourdomain.com) is the FLASK_API_URL for the frontend."
+  echo "  Logs: journalctl -u avenza-api -f    Tunnel: systemctl status cloudflared"
+  exit 0
+fi
+
 step "6/6 HTTPS ($DOMAIN) and firewall"
 sudo tee /etc/caddy/Caddyfile >/dev/null <<EOF
 $DOMAIN {
@@ -100,7 +121,7 @@ for _ in $(seq 1 60); do curl -fsS -m 3 http://127.0.0.1:5000/health >/dev/null 
 curl -fsS -m 3 http://127.0.0.1:5000/health >/dev/null || die "The backend did not start. See: journalctl -u avenza-api -n 50"
 
 printf '\n\033[32m✓ Backend running.\033[0m\n'
-echo "  Address for Vercel (FLASK_API_URL):  https://$DOMAIN"
+echo "  Address for the frontend (FLASK_API_URL):  https://$DOMAIN"
 echo "  Check it in a browser:               https://$DOMAIN/health"
 echo "  Logs:                                journalctl -u avenza-api -f"
 echo "  If https does not load: open ports 80 and 443 in Oracle Cloud → your subnet's Security List."
