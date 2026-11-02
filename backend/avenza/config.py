@@ -38,12 +38,17 @@ class Config:
     _LLM_KEY = os.environ.get("LLM_API_KEY", "")
     _PRESET = os.environ.get("LLM_PROVIDER", "")
     GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY") or (_LLM_KEY if _PRESET != "deepseek" else "")
+    # Backup Gemini keys (comma-separated), best from other Google Cloud projects: each has its own quota. Used
+    # only when the key before it is rejected, revoked or out of quota, so a live site keeps answering.
+    GEMINI_API_KEYS = [k for k in dict.fromkeys([GEMINI_API_KEY, *(x.strip() for x in os.environ.get(
+        "GEMINI_BACKUP_API_KEYS", "").split(","))]) if k]
     DEEPSEEK_API_KEY = os.environ.get("DEEPSEEK_API_KEY") or (_LLM_KEY if _PRESET == "deepseek" else "")
     LLM_PROVIDER = _PRESET if _PRESET in ("gemini", "deepseek") else ("deepseek" if DEEPSEEK_API_KEY and not GEMINI_API_KEY else "gemini")
     LLM_PROVIDERS = {
         "gemini": {
             "name": "Gemini",
             "key": GEMINI_API_KEY,
+            "keys": GEMINI_API_KEYS,
             "base_url": os.environ.get("GEMINI_BASE_URL", "https://generativelanguage.googleapis.com/v1beta/openai").rstrip("/"),
             # Measured on the free tier (2026-10-05) with a grounded question: 3.5 Flash-Lite answered correctly in
             # 1-3 s; 3.8 Flash took ~5 s (it thinks before writing, "minimal" is rejected) and was often overloaded.
@@ -63,6 +68,7 @@ class Config:
         "deepseek": {
             "name": "DeepSeek",
             "key": DEEPSEEK_API_KEY,
+            "keys": [DEEPSEEK_API_KEY] if DEEPSEEK_API_KEY else [],
             "base_url": os.environ.get("DEEPSEEK_BASE_URL", "https://api.deepseek.com").rstrip("/"),
             "models": {"fast": os.environ.get("DEEPSEEK_FAST_MODEL", "deepseek-flash"),
                        "accurate": os.environ.get("DEEPSEEK_MODEL", "deepseek-v4-pro")},

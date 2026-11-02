@@ -69,6 +69,45 @@ class _Retry(Exception):
     """The provider is busy or out of quota for this model: try again or move to the next model."""
 
 
+# How providers say the key itself is the problem. Gemini answers a bad or revoked key with 400 "Invalid Auth key"
+# or API_KEY_INVALID, not only 401/403 (seen 2026-11-02).
+_KEY_ERROR = re.compile(r"invalid auth|api[ _]?key|API_KEY_INVALID|PERMISSION_DENIED|unauthenticated|credential|"
+                        r"has been suspended|billing", re.I)
+
+
+def is_key_error(status: int, detail: str) -> bool:
+    if status in (401, 402, 403):
+        return True
+    if status == 429:
+        return bool(re.search(r"per ?day|daily|billing|exceeded your current quota", detail, re.I))
+    return status == 400 and bool(_KEY_ERROR.search(detail))
+
+
+class _KeyFailed(_Retry):
+    """This API key cannot be used (rejected, revoked, out of quota or balance): move to the next key."""
+
+
+# Per key (by position, never the key itself): when it last failed and why, for /health and the logs.
+_key_state: dict[int, dict] = {}
+
+
+def keys(p: dict) -> list[str]:
+    return p.get("keys") or ([p["key"]] if p.get("key") else [])
+
+
+def _key_failed(index: int, reason: str) -> None:
+    if _key_state.get(index, {}).get("reason") != reason:
+        try:
+            current_app.logger.error("API key #%d failed: %s", index + 1, reason)
+        except RuntimeError:  # worker thread without the app context
+            pass
+    _key_state[index] = {"at": time.time(), "reason": reason}
+
+
+def _key_ok(index: int) -> None:
+    _key_state.pop(index, None)
+
+
 def _open_stream(p: dict, body: dict) -> requests.Response:
     name = p["name"]
     try:
@@ -86,14 +125,13 @@ def _open_stream(p: dict, body: dict) -> requests.Response:
         return res
     detail = _error_message(res)
     res.close()
+    # A bad key, a whole day's quota or a billing problem belongs to the key: other models on it would fail too.
+    if is_key_error(res.status_code, detail):
+        raise _KeyFailed(f"{res.status_code}: {detail}")
     if res.status_code in (500, 502, 503, 504, 429):
         raise _Retry(f"{res.status_code}: {detail}")
     if res.status_code == 400 and "thinking level" in detail.lower() and "reasoning_effort" in body:
         raise _Retry("unsupported reasoning level")
-    if res.status_code in (401, 403) or "API key" in detail:
-        raise LLMUnavailable(f"{name} rejected the API key. Check LLM_API_KEY in .env.local.")
-    if res.status_code == 402:
-        raise LLMUnavailable(f"Your {name} account has no balance left.")
     if res.status_code == 404:
         raise _Retry(f"model '{body['model']}' not available")
     raise LLMUnavailable(f"{name} error ({res.status_code}): {detail}")
@@ -108,7 +146,8 @@ def stream_chat(messages: list[dict], mode: str | None = None, reasoning: str | 
     cfg = current_app.config
     p = provider()
     name = p["name"]
-    if not p["key"]:
+    all_keys = keys(p)
+    if not all_keys:
         raise LLMUnavailable("The LLM API is not configured. Add LLM_API_KEY to .env.local and restart the app.")
     mode = resolve_mode(mode)
     extra = dict(p["extra"][mode])
@@ -123,33 +162,49 @@ def stream_chat(messages: list[dict], mode: str | None = None, reasoning: str | 
     # Hedged requests: the free tier's first word takes anywhere from 1 to 10 s on the same model, and busy models
     # answer 503 after ~2 s. If the current model has not written a word within HEDGE_SECONDS (or fails), the next
     # model starts too, and whichever writes first answers; the others are closed.
-    attempts = [p["models"][mode]] + [m for m in p.get("fallbacks", []) if m != p["models"][mode]]
+    # Every model on the main key first; a backup key's models only after a key has failed (never raced, so a
+    # backup key's quota is kept for when it is needed).
+    models = [p["models"][mode]] + [m for m in p.get("fallbacks", []) if m != p["models"][mode]]
+    attempts = [(k, model) for k in range(len(all_keys)) for model in models]
     pool = ThreadPoolExecutor(max_workers=len(attempts))
     running, winner, last, nxt, fatal = {}, None, "", 0, None
+    dead_keys: set[int] = set()
 
     def launch():
         nonlocal nxt
-        model = attempts[nxt]
+        while nxt < len(attempts) and attempts[nxt][0] in dead_keys:
+            nxt += 1  # this key already failed: skip its other models
+        if nxt >= len(attempts):
+            return
+        k, model = attempts[nxt]
         nxt += 1
-        running[pool.submit(_first_chunk, p, {**base, "model": model})] = model
+        running[pool.submit(_first_chunk, {**p, "key": all_keys[k]}, {**base, "model": model})] = (k, model)
 
     launch()
     try:
         while winner is None and running:
-            wait_for = cfg["LLM_HEDGE_SECONDS"] if nxt < len(attempts) else None
-            done, _ = wait(running, timeout=wait_for, return_when=FIRST_COMPLETED)
+            # Race the next model only on the same key; a backup key starts only when a key has failed.
+            can_hedge = nxt < len(attempts) and attempts[nxt][0] == attempts[nxt - 1][0]
+            done, _ = wait(running, timeout=cfg["LLM_HEDGE_SECONDS"] if can_hedge else None, return_when=FIRST_COMPLETED)
             if not done:
                 launch()  # slow to start: race the next model
                 continue
             for fut in done:
-                model = running.pop(fut)
+                k, model = running.pop(fut)
                 try:
                     winner = fut.result()
+                    _key_ok(k)
                     break
+                except _KeyFailed as exc:
+                    last = str(exc)
+                    dead_keys.add(k)
+                    _key_failed(k, last[:200])
+                    if k + 1 < len(all_keys):
+                        current_app.logger.warning("%s key #%d failed; switching to key #%d", name, k + 1, k + 2)
                 except _Retry as exc:
                     last = str(exc)
                     current_app.logger.warning("%s %s unavailable (%s); trying next", name, model, last)
-                except LLMUnavailable as exc:  # bad key, no balance, no connection: another model may still answer
+                except LLMUnavailable as exc:  # no connection: another model may still answer
                     fatal = exc
             if winner is None and not running and nxt < len(attempts):
                 launch()
@@ -161,6 +216,9 @@ def stream_chat(messages: list[dict], mode: str | None = None, reasoning: str | 
     if winner is None:
         if fatal is not None:
             raise fatal
+        if len(dead_keys) == len(all_keys):
+            raise LLMUnavailable(f"{name} rejected every API key or their quota is used up. Check GEMINI_API_KEY "
+                                 "and GEMINI_BACKUP_API_KEYS (or billing) in the backend settings.")
         if last.startswith("429"):
             raise LLMUnavailable(f"{name} free-tier limit reached on every model. Wait a minute and try again.")
         raise LLMUnavailable(f"{name} is overloaded right now. Try again in a few seconds.")
@@ -257,10 +315,24 @@ def quick_json(messages: list[dict], timeout: float = 6.0, max_tokens: int = 400
 
     Gemini's lite models answer in ~1 s but spike to 3+ s under load, so both are asked in parallel and the first
     good reply wins. Returns None on any failure or after timeout seconds: callers fall back to rules.
+    A key that is rejected or out of quota is skipped for the next one.
     """
     p = provider()
-    if not p["key"]:
-        return None
+    for k, key in enumerate(keys(p)):
+        if _key_state.get(k) and time.time() - _key_state[k]["at"] < 60 and k + 1 < len(keys(p)):
+            continue  # failed a moment ago: go straight to the backup
+        out, key_failed = _quick_once({**p, "key": key}, messages, timeout, max_tokens)
+        if out is not None:
+            _key_ok(k)
+            return out
+        if not key_failed:
+            return None
+        _key_failed(k, key_failed)
+    return None
+
+
+def _quick_once(p: dict, messages: list[dict], timeout: float, max_tokens: int) -> tuple[dict | None, str]:
+    """(answer or None, reason when the key itself failed)."""
     extra = dict(p["extra"]["fast"])
     if "reasoning_effort" in extra:
         extra["reasoning_effort"] = "minimal"  # measured 0.8-1.6 s on Flash-Lite; "none" is rejected
@@ -269,20 +341,24 @@ def quick_json(messages: list[dict], timeout: float = 6.0, max_tokens: int = 400
     futures = [pool.submit(_post_json, p, {"model": m, "messages": messages, "max_tokens": max_tokens,
                                            "response_format": {"type": "json_object"}, **extra}, timeout)
                for m in models]
+    key_errors = []
     try:
         for done in as_completed(futures, timeout=timeout):
             try:
                 out, u = done.result()
             except (requests.RequestException, ValueError, KeyError, IndexError, TypeError) as exc:
                 current_app.logger.warning("quick_json: %s", exc)
+                m = re.match(r"(\d{3}) (.*)", str(exc))
+                if m and is_key_error(int(m[1]), m[2]):
+                    key_errors.append(str(exc)[:200])
                 continue
             _count("fast", int(u.get("prompt_tokens") or _estimate(messages)), int(u.get("completion_tokens") or 0))
-            return out
+            return out, ""
     except TimeoutError:
         current_app.logger.warning("quick_json: no reply within %.1f s", timeout)
     finally:
         pool.shutdown(wait=False, cancel_futures=True)
-    return None
+    return None, (key_errors[0] if len(key_errors) == len(models) else "")
 
 
 def embed(texts: list[str], purpose: str = "document") -> list[list[float]]:
@@ -295,9 +371,10 @@ def embed(texts: list[str], purpose: str = "document") -> list[list[float]]:
     if not texts:
         return []
     cfg = current_app.config
-    key = cfg["GEMINI_API_KEY"]
-    if not key:
+    all_keys = cfg["GEMINI_API_KEYS"]
+    if not all_keys:
         raise LLMUnavailable("Embeddings need GEMINI_API_KEY in .env.local.")
+    k = 0
     patient = purpose != "query"
     tries = 15 if patient else 2
     out: list[list[float]] = []
@@ -305,7 +382,7 @@ def embed(texts: list[str], purpose: str = "document") -> list[list[float]]:
         body = {"model": cfg["EMBED_MODEL"], "input": texts[i:i + 100], "dimensions": cfg["EMBED_DIMENSIONS"]}
         for attempt in range(tries):
             try:
-                res = _http.post(f"{cfg['EMBED_BASE_URL']}/embeddings", headers={"Authorization": f"Bearer {key}"},
+                res = _http.post(f"{cfg['EMBED_BASE_URL']}/embeddings", headers={"Authorization": f"Bearer {all_keys[k]}"},
                                  json=body, timeout=(5, 60))
             except requests.RequestException as exc:
                 if attempt == tries - 1:
@@ -313,7 +390,13 @@ def embed(texts: list[str], purpose: str = "document") -> list[list[float]]:
                 time.sleep(1 + attempt)
                 continue
             if res.ok:
+                _key_ok(k)
                 break
+            # This key is rejected or out of its daily quota: the next key, if there is one.
+            if is_key_error(res.status_code, res.text) and k + 1 < len(all_keys):
+                _key_failed(k, f"embeddings {res.status_code}: {_error_message(res)[:160]}")
+                k += 1
+                continue
             if res.status_code in (429, 500, 502, 503, 504) and attempt < tries - 1:
                 delay = 1.0
                 if res.status_code == 429 and patient:
@@ -354,4 +437,6 @@ def status() -> dict:
     p = provider()
     default = cfg["AVENZA_MODELS"][model_id(cfg["LLM_DEFAULT_MODE"])]["name"]
     out = {"provider": p["name"], "llm": default, "llm_ready": bool(p["key"]), "balance_ok": _has_balance(p)}
-    return {**out, "embed_ready": bool(cfg["GEMINI_API_KEY"])}
+    # Which keys failed recently (by number, never the key): a failed main key means the site runs on a backup.
+    failing = {f"key{i + 1}": v["reason"][:120] for i, v in _key_state.items() if time.time() - v["at"] < 3600}
+    return {**out, "embed_ready": bool(cfg["GEMINI_API_KEY"]), "keys": len(keys(p)), "keys_failing": failing}

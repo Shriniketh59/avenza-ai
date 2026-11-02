@@ -13,6 +13,8 @@
   "vars": {
     // Filled in at deploy time: the public address of the site and of the backend.
     "APP_URL": "https://avenza.example.com",
-    "FLASK_API_URL": "https://api.example.com"
+    "FLASK_API_URL": "https://api.example.com",
+    // Google sign-in (the secret is set with `npx wrangler secret put GOOGLE_CLIENT_SECRET`)
+    "GOOGLE_CLIENT_ID": ""
   }
 }

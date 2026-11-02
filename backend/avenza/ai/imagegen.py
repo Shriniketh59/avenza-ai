@@ -45,8 +45,8 @@ def generate(prompt: str, mode: str, user_id: int, images: list[str] = ()) -> tu
     Returns (image ids, the model's caption). Raises llm.LLMUnavailable.
     """
     cfg = current_app.config
-    key = cfg["GEMINI_API_KEY"]
-    if not key:
+    all_keys = cfg["GEMINI_API_KEYS"]
+    if not all_keys:
         raise llm.LLMUnavailable("Image generation needs GEMINI_API_KEY in .env.local.")
     model = cfg["IMAGE_MODELS"][mode]
     body = {
@@ -55,11 +55,15 @@ def generate(prompt: str, mode: str, user_id: int, images: list[str] = ()) -> tu
         ]]}],
         "generationConfig": {"responseModalities": ["TEXT", "IMAGE"]},
     }
-    try:
-        res = requests.post(f"{cfg['IMAGE_BASE_URL']}/models/{model}:generateContent",
-                            headers={"x-goog-api-key": key}, json=body, timeout=(5, 120))
-    except requests.RequestException as exc:
-        raise llm.LLMUnavailable("Cannot reach the Gemini API for images. Check your internet connection.") from exc
+    # The next key when one is rejected or has no image quota (images need billing on the key's project).
+    for k, key in enumerate(all_keys):
+        try:
+            res = requests.post(f"{cfg['IMAGE_BASE_URL']}/models/{model}:generateContent",
+                                headers={"x-goog-api-key": key}, json=body, timeout=(5, 120))
+        except requests.RequestException as exc:
+            raise llm.LLMUnavailable("Cannot reach the Gemini API for images. Check your internet connection.") from exc
+        if not (llm.is_key_error(res.status_code, res.text) or res.status_code == 429) or k + 1 == len(all_keys):
+            break
     if res.status_code == 429:
         if "PerDay" in res.text and "FreeTier" in res.text:
             raise llm.LLMUnavailable(

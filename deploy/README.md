@@ -41,6 +41,31 @@ Needs Node.js 22+ for `wrangler`, and a Cloudflare API token with *Workers Scrip
    ```
 3. Deploy: `npm run cf:deploy`. Test the Cloudflare build locally first with `npm run cf:preview`.
 
+## 3. Google sign-in
+
+In Google Cloud console → APIs & Services → Credentials → your OAuth client:
+- **Authorised redirect URIs**: add `https://avenza.<domain>/api/auth/google/callback` (keep the localhost one for development).
+- **Authorised JavaScript origins**: add `https://avenza.<domain>`.
+
+OAuth consent screen (Google Auth Platform → Audience): **Publish app** ("In production"). In *Testing* only listed
+test users can sign in, and their sign-in expires after 7 days. The app asks only for name, email and photo, so
+publishing needs no Google review.
+
+The frontend needs `GOOGLE_CLIENT_ID` (var) and `GOOGLE_CLIENT_SECRET` (secret); the backend needs the same
+`GOOGLE_CLIENT_ID` in `~/avenza.env` (it checks that each Google sign-in was issued for this client).
+
+## 4. Keeping the Gemini API working
+
+- **Backup keys**: put one or more keys from *other* Google Cloud projects in `GEMINI_BACKUP_API_KEYS`
+  (comma-separated) in `~/avenza.env`. If the main key is rejected, revoked or out of quota, the backend switches to
+  the next one by itself. `https://api.<domain>/health` shows `keys` and `keys_failing` (by number, never the key).
+- **Billing**: the free tier has small daily limits per model, and images need billing. For a live site, turn on
+  billing for the main key's project (Google AI Studio → Billing) and set a budget alert in Google Cloud.
+- **Never commit a key**: Google disables keys it finds in public repositories (this repo is public). Keys live
+  only in `~/avenza.env` on the server; `.env*` files are git-ignored.
+- **Restrict the key**: Google Cloud → Credentials → the key → *API restrictions*: Generative Language API only.
+- **Monitor**: point a free uptime monitor (e.g. UptimeRobot) at `https://api.<domain>/health`.
+
 Notes:
 - The Worker is ~3.0 MB compressed: just inside the free plan's 3 MB limit. The free plan also allows only
   10 ms of CPU per request; if pages fail with error 1102, switch to Workers Paid ($5/month: 10 MB, 30 s CPU).
