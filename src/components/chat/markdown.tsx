@@ -1,7 +1,7 @@
 "use client";
 
 import { memo, isValidElement, type ReactElement, type ReactNode } from "react";
-import ReactMarkdown from "react-markdown";
+import ReactMarkdown, { type Components } from "react-markdown";
 import rehypeHighlight from "rehype-highlight";
 import rehypeKatex from "rehype-katex";
 import remarkGfm from "remark-gfm";
@@ -42,6 +42,62 @@ function mathDelimiters(md: string): string {
     .join("");
 }
 
+/**
+ * Defined once, outside the component: react-markdown uses these as element types, so an object recreated on
+ * every render made React unmount and remount each code block and diagram on every streamed word (the diagram
+ * restarted its fade-in and lost its drawing each time, so it looked blurred and never drew while writing).
+ */
+const COMPONENTS: Components = {
+  pre({ children }) {
+    const child = isValidElement(children) ? (children as ReactElement<{ className?: string; children?: React.ReactNode }>) : null;
+    const lang = /language-([\w-]+)/.exec(child?.props.className ?? "")?.[1] ?? null;
+    if (lang === "mermaid") return <MermaidDiagram code={textOf(child?.props.children).trim()} />;
+    return <CodeBlock language={lang}>{child ?? children}</CodeBlock>;
+  },
+  a({ href, children }) {
+    // A generated document: a download button, not a new tab. Only real file ids (added by the app);
+    // a file link the model wrote itself points nowhere, so it is shown as plain text.
+    if (href?.startsWith("/api/files/") && !/^\/api\/files\/[a-f0-9]{32}$/.test(href)) return <span>{children}</span>;
+    if (href?.startsWith("/api/files/")) {
+      return (
+        <a
+          href={href}
+          download
+          className="not-prose inline-flex items-center gap-2 rounded-xl border border-accent/40 bg-accent/10 px-3.5 py-2 text-sm font-medium text-foreground no-underline hover:bg-accent/20"
+        >
+          {children}
+        </a>
+      );
+    }
+    return (
+      <a href={href} target="_blank" rel="noopener noreferrer">
+        {children}
+      </a>
+    );
+  },
+  img({ src, alt }) {
+    if (typeof src !== "string") return null;
+    return (
+      <span className="my-2 block">
+        {/* eslint-disable-next-line @next/next/no-img-element -- generated images are served from our own API */}
+        <img src={src} alt={alt ?? ""} loading="lazy" className="max-h-[512px] max-w-full rounded-xl border border-border" />
+        {src.startsWith("/api/images/") && (
+          <a href={src} download={`avenza-${src.split("/").pop()}.png`} className="mt-1 inline-block text-xs text-muted hover:text-foreground">
+            Download image
+          </a>
+        )}
+      </span>
+    );
+  },
+  table({ children }) {
+    return (
+      <div className="overflow-x-auto">
+        <table>{children}</table>
+      </div>
+    );
+  },
+};
+
 export const Markdown = memo(function Markdown({ content }: { content: string }) {
   return (
     <div className="prose-avenza">
@@ -51,56 +107,7 @@ export const Markdown = memo(function Markdown({ content }: { content: string })
           [rehypeKatex, { throwOnError: false, strict: "ignore" }],
           [rehypeHighlight, { detect: true, ignoreMissing: true }],
         ]}
-        components={{
-          pre({ children }) {
-            const child = isValidElement(children) ? (children as ReactElement<{ className?: string; children?: React.ReactNode }>) : null;
-            const lang = /language-([\w-]+)/.exec(child?.props.className ?? "")?.[1] ?? null;
-            if (lang === "mermaid") return <MermaidDiagram code={textOf(child?.props.children).trim()} />;
-            return <CodeBlock language={lang}>{child ?? children}</CodeBlock>;
-          },
-          a({ href, children }) {
-            // A generated document: a download button, not a new tab. Only real file ids (added by the app);
-            // a file link the model wrote itself points nowhere, so it is shown as plain text.
-            if (href?.startsWith("/api/files/") && !/^\/api\/files\/[a-f0-9]{32}$/.test(href)) return <span>{children}</span>;
-            if (href?.startsWith("/api/files/")) {
-              return (
-                <a
-                  href={href}
-                  download
-                  className="not-prose inline-flex items-center gap-2 rounded-xl border border-accent/40 bg-accent/10 px-3.5 py-2 text-sm font-medium text-foreground no-underline hover:bg-accent/20"
-                >
-                  {children}
-                </a>
-              );
-            }
-            return (
-              <a href={href} target="_blank" rel="noopener noreferrer">
-                {children}
-              </a>
-            );
-          },
-          img({ src, alt }) {
-            if (typeof src !== "string") return null;
-            return (
-              <span className="my-2 block">
-                {/* eslint-disable-next-line @next/next/no-img-element -- generated images are served from our own API */}
-                <img src={src} alt={alt ?? ""} loading="lazy" className="max-h-[512px] max-w-full rounded-xl border border-border" />
-                {src.startsWith("/api/images/") && (
-                  <a href={src} download={`avenza-${src.split("/").pop()}.png`} className="mt-1 inline-block text-xs text-muted hover:text-foreground">
-                    Download image
-                  </a>
-                )}
-              </span>
-            );
-          },
-          table({ children }) {
-            return (
-              <div className="overflow-x-auto">
-                <table>{children}</table>
-              </div>
-            );
-          },
-        }}
+        components={COMPONENTS}
       >
         {mathDelimiters(content)}
       </ReactMarkdown>
