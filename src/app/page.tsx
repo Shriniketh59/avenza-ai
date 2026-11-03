@@ -22,7 +22,7 @@ export default async function Home() {
   if (await getSession()) redirect("/chat");
 
   return (
-    <div className="dark relative min-h-full overflow-hidden bg-[#050a1c] text-[#eef2ff]">
+    <div className="dark relative min-h-full overflow-hidden bg-[#050a1c] pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] text-[#eef2ff]">
       <Aurora />
       <LandingNav />
 

@@ -61,9 +61,11 @@
   --color-blue: var(--blue);
   --color-danger: var(--danger);
   --color-code: var(--code-bg);
-  --font-sans: var(--font-sans-face);
-  --font-mono: var(--font-mono-face);
-  --font-display: var(--font-display-face);
+  /* Latin first, then each script's own font (see layout.tsx), then the system's. */
+  --font-scripts: var(--font-tamil), var(--font-devanagari), var(--font-telugu), var(--font-kannada), var(--font-malayalam), var(--font-bengali), var(--font-gujarati), var(--font-gurmukhi), var(--font-arabic);
+  --font-sans: var(--font-sans-face), var(--font-scripts), sans-serif;
+  --font-mono: var(--font-mono-face), var(--font-scripts), monospace;
+  --font-display: var(--font-display-face), var(--font-scripts), sans-serif;
 }
 
 html,
@@ -367,7 +369,7 @@ body {
 
 /* ---------- Streaming answer (ChatGPT-style) ---------- */
 /* New paragraphs and list items ease in; a pulsing dot marks where text is arriving. */
-.avz-typing .prose-avenza > * { animation: avz-block-in 280ms ease-out both; }
+.avz-typing .prose-avenza > :not([data-diagram]) { animation: avz-block-in 280ms ease-out both; }
 @keyframes avz-block-in { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: none; } }
 .avz-typing .prose-avenza > :is(p, h1, h2, h3, h4, blockquote):last-child::after,
 .avz-typing .prose-avenza > :is(ul, ol):last-child > li:last-child::after {

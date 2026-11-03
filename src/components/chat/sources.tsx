@@ -1,7 +1,7 @@
-import { FileText, Globe, Newspaper } from "lucide-react";
+import { FileText, Globe, ImageIcon, Newspaper, Plug } from "lucide-react";
 import type { Source } from "@/types/chat";
 
-const ICON = { document: FileText, news: Newspaper, web: Globe } as const;
+const ICON = { document: FileText, news: Newspaper, web: Globe, image: ImageIcon, plugin: Plug } as const;
 
 export function Sources({ sources }: { sources: Source[] }) {
   const unique = sources.filter((s, i, all) => all.findIndex((x) => (x.url ?? x.filename) === (s.url ?? s.filename)) === i);

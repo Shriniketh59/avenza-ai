@@ -3,6 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useReducer, useRef, type ReactNode } from "react";
 import { ApiError, streamChat } from "@/lib/api-client";
 import { usePreferences } from "@/hooks/use-preferences";
+import { languageByCode } from "@/config/languages";
 import { createId, titleFromMessage } from "@/lib/utils";
 import type { PickedImage } from "@/lib/images";
 import type { AttachmentMeta, ChatMessage, Feedback, ToolCall } from "@/types/chat";
@@ -168,6 +169,8 @@ export function ConversationProvider({ userId, children }: { userId: string; chi
           webSearch: prefsRef.current.webSearch,
           mode: prefsRef.current.mode,
           agentId: prefsRef.current.agent,
+          skillId: prefsRef.current.skill || undefined,
+          language: languageByCode(prefsRef.current.replyLanguage)?.name ?? "auto",
           voice: options.voice,
           ...attachmentsFor(history),
         },
@@ -177,6 +180,7 @@ export function ConversationProvider({ userId, children }: { userId: string; chi
         if (event.type === "token") patch((m) => ({ content: m.content + event.value, status: "streaming" }));
         else if (event.type === "tool") patch((m) => ({ toolCalls: upsertTool(m.toolCalls, event.tool) }));
         else if (event.type === "sources") patch(() => ({ sources: event.sources }));
+        else if (event.type === "language") patch(() => ({ language: event.code }));
         else if (event.type === "error") throw new ApiError(event.message, 500);
         else if (event.type === "done") break;
       }

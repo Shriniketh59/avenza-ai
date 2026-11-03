@@ -23,6 +23,41 @@ CREATE TABLE IF NOT EXISTS documents (
     status      TEXT NOT NULL DEFAULT 'ready',
     created_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
 );
+CREATE TABLE IF NOT EXISTS usage_events (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id        INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    at             REAL NOT NULL,
+    model          TEXT NOT NULL,
+    input_tokens   INTEGER NOT NULL,
+    output_tokens  INTEGER NOT NULL,
+    weighted       INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS usage_events_user_at ON usage_events(user_id, at);
+CREATE TABLE IF NOT EXISTS doc_chunks (
+    document_id  TEXT NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+    user_id      INTEGER NOT NULL,
+    idx          INTEGER NOT NULL,
+    text         TEXT NOT NULL,
+    page         INTEGER,
+    PRIMARY KEY (document_id, idx)
+);
+CREATE INDEX IF NOT EXISTS doc_chunks_user ON doc_chunks(user_id);
+CREATE TABLE IF NOT EXISTS skills (
+    id            TEXT PRIMARY KEY,
+    user_id       INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    name          TEXT NOT NULL,
+    description   TEXT NOT NULL DEFAULT '',
+    instructions  TEXT NOT NULL,
+    created_at    TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+    updated_at    TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+);
+CREATE INDEX IF NOT EXISTS skills_user ON skills(user_id);
+CREATE TABLE IF NOT EXISTS user_plugins (
+    user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    plugin_id  TEXT NOT NULL,
+    enabled    INTEGER NOT NULL,
+    PRIMARY KEY (user_id, plugin_id)
+);
 CREATE TABLE IF NOT EXISTS password_resets (
     token_hash  TEXT PRIMARY KEY,
     user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -56,7 +91,15 @@ def init_db(app):
             conn.execute("UPDATE documents SET indexed = chunks")
         if "error" not in cols:
             conn.execute("ALTER TABLE documents ADD COLUMN error TEXT")
-        # Indexing jobs live in memory; anything unfinished at shutdown cannot resume.
+        # Skills: switched off without deleting; source_url is where an imported skill is updated from.
+        cols = {r[1] for r in conn.execute("PRAGMA table_info(skills)")}
+        if "enabled" not in cols:
+            conn.execute("ALTER TABLE skills ADD COLUMN enabled INTEGER NOT NULL DEFAULT 1")
+        if "source_url" not in cols:
+            conn.execute("ALTER TABLE skills ADD COLUMN source_url TEXT")
+        # Indexing jobs live in memory; anything unfinished at shutdown cannot resume. A camera scan keeps its
+        # pages' text (keyword search still finds them), so it stays usable.
+        conn.execute("UPDATE documents SET status = 'ready' WHERE status = 'indexing' AND mime_type = 'application/x-avenza-scan'")
         conn.execute(
             "UPDATE documents SET status = 'error', error = 'Indexing was interrupted. Please upload the file again.' "
             "WHERE status = 'indexing'"

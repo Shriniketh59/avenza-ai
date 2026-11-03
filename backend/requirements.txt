@@ -1,11 +1,17 @@
 Flask==3.1.3
+# Production server (one process, many threads: indexing jobs and the news scheduler live in memory)
+gunicorn==26.2.0
 PyJWT==2.15.1
 requests==2.34.2
 python-dotenv==1.2.4
+# SKILL.md frontmatter (skill imports)
+PyYAML==6.0.3
 chromadb==1.5.9
 pypdf==6.19.0
 python-docx==1.2.0
 python-pptx==1.0.2
+# PDF export of generated documents
+fpdf2==2.8.9
 pypdfium2==5.14.0
 openpyxl==3.1.5
 ddgs==9.16.0
@@ -14,8 +20,16 @@ feedparser==6.0.14
 faster-whisper==1.2.1
 av==15.1.0
 piper-tts==1.8.0
+# Japanese voices (Piper reads Japanese through OpenJTalk)
+pyopenjtalk==0.4.1
+# Which language a reply is in, to pick the voice that reads it
+langid==1.1.6
 # Used directly by the local NLP models (reranker + extractive QA)
 onnxruntime==1.30.0
 tokenizers==0.23.2
 huggingface_hub==1.33.0
 numpy==2.5.3
+# Stock prices plugin (handles Yahoo Finance's cookie check)
+yfinance==1.7.0
+# OCR for uploaded images and scanned pages
+rapidocr_onnxruntime==1.2.3

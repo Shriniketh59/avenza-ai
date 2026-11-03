@@ -33,7 +33,14 @@ DOC_HINTS = re.compile(
     r"|\b(uploaded|attached)\b|\b(in|from|according to) (my|our|this|the attached|the uploaded) (report|statement|notes?|contract)\b",
     re.I,
 )
-GREETINGS = re.compile(r"^\s*(hi|hello|hey|thanks|thank you|good (morning|afternoon|evening)|ok|okay)\b[\s!.]*$", re.I)
+# Greetings and casual chat ("hi avenza", "hey there!", "how are you?", "thanks a lot"): answered without any search.
+GREETINGS = re.compile(
+    r"^\s*(?:(?:hi+|hello+|hey+|hiya|yo|namaste|hola|sup|howdy|greetings|thanks|thank you|thx|ty|ok|okay|cool|nice|great|"
+    r"good (?:morning|afternoon|evening|night|day)|bye|goodbye|see you|how are you(?: doing)?|how's it going|how r u|"
+    r"what'?s up|wassup|who are you|what can you do|what are you|(?:which|what) (?:model|ai|llm|version) (?:are you|is this)(?: using| running)?)"
+    r"(?:[\s,!.?]+(?:avenza(?: ai)?|ai|there|bro|buddy|dude|friend|mate|sir|team|all|so much|a lot|again|today))*[\s,!.?]*)+$",
+    re.I,
+)
 STOPWORDS = set("a an the and or but if of to in on for with at by from is are was were be been it this that these those what which who how why when where do does did can could should would i you we they he she my your our".split())
 
 
@@ -189,6 +196,30 @@ def headline_topic(text: str) -> tuple[str, ...] | None:
     if any(w not in NEWS_TOPICS and w not in ("india", "indian") for w in rest):
         return None
     return tuple(dict.fromkeys(c for w in rest for c in NEWS_TOPICS.get(w, ())))
+
+
+# How long the answer should be, from how the user asked.
+_DETAIL = re.compile(
+    r"\b(in[ -]?detail|detailed|details|elaborate(ly)?|in[ -]depth|deep[ -]?dive|comprehensive(ly)?|thorough(ly)?|"
+    r"step[ -]by[ -]step|everything about|all about|full (explanation|guide|history|details|overview)|"
+    r"complete (guide|explanation|overview|history)|explain (fully|everything|thoroughly|completely)|"
+    r"long (answer|explanation)|essay|with examples|pros and cons|advantages and disadvantages|\d{3,4}\s*words)\b",
+    re.I,
+)
+_BRIEF = re.compile(
+    r"\b(briefly|brief|in short|short answer|in (one|1|a) (line|sentence|word)|one[- ]liner|tl;?dr|"
+    r"quick(ly)? (answer|summary)|just (tell me|the answer)|keep it short)\b",
+    re.I,
+)
+
+
+def answer_length(text: str) -> str:
+    """"detailed" when the user asks for depth, "brief" when they ask for a short answer, else "normal"."""
+    if _BRIEF.search(text):
+        return "brief"
+    if _DETAIL.search(text):
+        return "detailed"
+    return "normal"
 
 
 @dataclass

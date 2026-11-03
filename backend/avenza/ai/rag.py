@@ -13,28 +13,78 @@ SYSTEM_PROMPT = """You are AVENZA AI, a precise assistant for finance and techno
 - Never invent or estimate figures, prices, rates, dates, names, quotes, events or URLs. Only state a specific fact if it is in the provided sources or saved memory, or is stable textbook knowledge (definitions, formulas, how things work).
 - When sources are provided, answer from them and cite them inline as [1], [2] matching their numbers.
 - If something is unknown or not in the sources, say so plainly instead of filling the gap.
-- Answer clearly and completely: as long as the question needs, without padding. Use Markdown: short paragraphs, lists, tables and fenced code where useful. No LaTeX (it is not rendered): write formulas and arithmetic as inline code, like `FV = P × (1 + r)^n`.
+- Answer clearly and completely: as long as the question needs, without padding. Use Markdown: short paragraphs, lists, tables and fenced code where useful. Write formulas, equations and worked arithmetic as LaTeX math, which is rendered like a textbook: inline as \\( FV = P(1 + r)^n \\), and a key formula on its own line as \\[ s = \\sqrt{\\frac{\\sum (x_i - \\bar{x})^2}{n - 1}} \\]. Use \\frac, \\sqrt, \\sum, \\times, subscripts and superscripts; never put math in code formatting or between $ signs, and keep code formatting for real code.
 - Understand the question the way a thoughtful person would: read past typos and shorthand, work out the real need behind it, and answer that. Pitch the explanation to the user's level (simple words and an example for beginners, precise terms for experts). If it is genuinely ambiguous, state the most reasonable reading and answer it.
 - You are not a licensed financial adviser.
+- AVENZA can make PDF and Word documents: when the user asks for one, write the complete content and the app saves it as the file and adds the download button. Never say you cannot create files or documents, and never write file names, file sizes or download links yourself.
 - When the user shares personal details or asks you to remember something, confirm briefly in one sentence."""
 
 GROUNDING = """Answer the question above using ONLY these sources. Rules:
-- Every fact, figure, name and date must come from the sources, with the source number right after it, like [1]. Copy figures exactly as written; do not round, convert or recompute them unless asked. Any number you calculate yourself (a difference, total or growth rate) must be shown with its working as one inline-code expression containing `=`, like `40,000 - 35,000 = 5,000`. Write all other figures as plain text, never in code formatting.
+- Every fact, figure, name and date must come from the sources, with the source number right after it, like [1]. Copy figures exactly as written; do not round, convert or recompute them unless asked. Any number you calculate yourself (a difference, total or growth rate) must be shown with its working as one inline math expression containing =, like \\( 40{,}000 - 35{,}000 = 5{,}000 \\). Write all other figures as plain text, never as math or code.
 - Start with the direct, precise answer in one or two sentences. Then explain it from the sources: why or how it is so, the key figures, dates and context they give, each cited. Use short paragraphs or bullets. Explain only what the sources support, and keep it focused on what was asked.
 - If sources disagree, prefer the most recent one and mention the difference.
 - If the sources only partly answer, answer that part and say what is missing.
 - If the sources do not answer the question, reply "I couldn't find this in the sources." You may then add stable textbook background labelled "General knowledge:", but no specific figures, prices, dates or recent events."""
 
 
+def _chunk_rows(user_id: int, doc_ids: list[str] | None = None) -> list[dict]:
+    """The user's document passages from SQLite (all, or only these documents), shaped like vector hits."""
+    from ..db import get_db
+
+    sql = ("SELECT c.document_id, c.idx, c.text, c.page, d.filename FROM doc_chunks c "
+           "JOIN documents d ON d.id = c.document_id WHERE c.user_id = ?")
+    args: list = [user_id]
+    if doc_ids:
+        sql += f" AND c.document_id IN ({','.join('?' * len(doc_ids))})"
+        args += doc_ids
+    rows = []
+    for r in get_db().execute(sql, args):
+        meta = {"document_id": r["document_id"], "filename": r["filename"], "chunk": r["idx"]}
+        if r["page"] is not None:
+            meta["page"] = r["page"]
+        rows.append({"text": r["text"], "meta": meta, "distance": None})
+    return rows
+
+
+def keyword_docs(user_id: int, query: str, k: int) -> list[dict]:
+    """Best keyword (BM25) matches among the user's passages: finds exact names, figures and terms, and works
+    when embeddings are unavailable (API rate limit) or not finished yet."""
+    from .websearch import _bm25
+
+    rows = _chunk_rows(user_id)
+    if not rows:
+        return []
+    scores = _bm25(query, [r["text"] for r in rows])
+    best = sorted(zip(scores, range(len(rows))), key=lambda s: -s[0])[:k]
+    return [rows[i] for s, i in best if s > 0]
+
+
 def retrieve(user_id: int, query: str, analysis: QueryAnalysis, use_memory: bool) -> tuple[list[dict], list[dict]]:
-    """Vector candidates from the user's documents and memory; rank() decides which are relevant."""
+    """Hybrid candidates from the user's documents (meaning + keywords) and memory; rank() decides which are
+    relevant. Either half failing (embedding API limit) leaves the other."""
     if not analysis.needs_retrieval:
         return [], []
+    from .llm import LLMUnavailable
+
     cfg = current_app.config
-    docs = vectorstore.query(vectorstore.DOCS, user_id, query, cfg["RAG_TOP_K"] * 2, cfg["RAG_KEYWORD_DISTANCE"])
-    memories = (
-        vectorstore.query(vectorstore.MEMORY, user_id, query, 3, cfg["MEMORY_MAX_DISTANCE"]) if use_memory else []
-    )
+    k = cfg["RAG_TOP_K"] * 2
+    try:
+        semantic = vectorstore.query(vectorstore.DOCS, user_id, query, k, cfg["RAG_KEYWORD_DISTANCE"])
+    except LLMUnavailable as exc:
+        current_app.logger.warning("document search by meaning unavailable, using keywords only: %s", exc)
+        semantic = []
+    docs, seen = [], set()
+    for hit in semantic + keyword_docs(user_id, query, k):
+        key = (hit["meta"].get("document_id"), hit["meta"].get("chunk"))
+        if key not in seen:
+            seen.add(key)
+            docs.append(hit)
+    memories = []
+    if use_memory:
+        try:
+            memories = vectorstore.query(vectorstore.MEMORY, user_id, query, 3, cfg["MEMORY_MAX_DISTANCE"])
+        except LLMUnavailable:
+            memories = []
     return docs, memories
 
 
@@ -79,10 +129,8 @@ def file_items(user_id: int, doc_ids: list[str], query: str, max_chars: int = 24
     Small files are read whole (so "summarise this" sees everything); large ones contribute their
     opening passage plus the passages the reranker finds most relevant to the question.
     """
-    col = vectorstore.collection(vectorstore.DOCS, user_id)
-    where = {"document_id": {"$in": doc_ids}} if len(doc_ids) > 1 else {"document_id": doc_ids[0]}
-    got = col.get(where=where, include=["documents", "metadatas"])
-    rows = [{"text": t, "meta": m or {}} for t, m in zip(got["documents"], got["metadatas"])]
+    # From SQLite: an attached file is readable as soon as it is uploaded, embedded or not.
+    rows = _chunk_rows(user_id, doc_ids)
     order = {d: i for i, d in enumerate(doc_ids)}
     key = lambda r: (order.get(r["meta"].get("document_id"), 99), r["meta"].get("chunk", 0))  # noqa: E731
     if sum(len(r["text"]) for r in rows) > max_chars:
@@ -145,8 +193,20 @@ def rank(query: str, docs=(), news=(), web=()) -> list[dict]:
     return sorted(kept, key=lambda it: -it["score"])
 
 
-def top(items: list[dict]) -> list[dict]:
-    """Best passages overall, with no source repeated more than twice."""
+LENGTH_RULES = {
+    "brief": "Length: the user wants a short answer. Reply in 1-3 sentences (under about 60 words), direct answer "
+             "first. No headings or long lists.",
+    "detailed": "Length: the user asked for a detailed explanation. Write a thorough, well-organised answer of at "
+                "least 600 words (up to about 1200): a short opening that answers directly, then ## headings for each part (background, "
+                "how it works or what happened, key points, examples, significance or implications, as fits the topic), "
+                "with bullets or a table where they help, and a short summary at the end. Cover the topic fully; use the "
+                "sources for every specific fact, figure and date, and say plainly where they are silent.",
+}
+
+
+def top(items: list[dict], limit: int | None = None) -> list[dict]:
+    """Best passages overall (limit, default MAX_CONTEXT_PASSAGES), with no source repeated more than twice."""
+    limit = limit or current_app.config["MAX_CONTEXT_PASSAGES"]
     picked, per_source = [], {}
     for it in sorted(items, key=lambda it: -it.get("score", 0.0)):
         key = it.get("url") or it.get("filename") or it["label"]
@@ -154,13 +214,13 @@ def top(items: list[dict]) -> list[dict]:
             continue
         per_source[key] = per_source.get(key, 0) + 1
         picked.append(it)
-        if len(picked) >= current_app.config["MAX_CONTEXT_PASSAGES"]:
+        if len(picked) >= limit:
             break
     return picked
 
 
 def build_messages(history, items: list[dict], memories, analysis: QueryAnalysis, pending=(), searched: bool = False,
-                   agent=None, understood=None, images=()) -> list[dict]:
+                   agent=None, understood=None, images=(), passage_chars: int = 1800) -> list[dict]:
     now = datetime.now().astimezone()
     system = (
         SYSTEM_PROMPT
@@ -207,7 +267,7 @@ def build_messages(history, items: list[dict], memories, analysis: QueryAnalysis
         for i, it in enumerate(items):
             head = f"[{i + 1}] {it['kind']}: {it['label']}" + (f" — {it['title']}" if it.get("title") else "")
             head += f" (page {it['page']})" if it.get("page") else ""
-            blocks.append(f"{head}\n{it['text'][:1800]}")
+            blocks.append(f"{head}\n{it['text'][:passage_chars]}")
         turns[-1] = {
             "role": "user",
             "content": (

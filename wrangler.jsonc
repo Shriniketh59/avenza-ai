@@ -1,0 +1,20 @@
+// Cloudflare Workers config for the AVENZA frontend (Next.js via OpenNext). The backend runs separately
+// (deploy/oracle) and is reached server-side through FLASK_API_URL.
+// Secrets (AUTH_SECRET, GOOGLE_CLIENT_SECRET) are set with `npx wrangler secret put NAME`, never in this file.
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "avenza-ai",
+  "main": ".open-next/worker.js",
+  "compatibility_date": "2026-10-01",
+  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+  "assets": { "directory": ".open-next/assets", "binding": "ASSETS" },
+  "services": [{ "binding": "WORKER_SELF_REFERENCE", "service": "avenza-ai" }],
+  "observability": { "enabled": true },
+  "vars": {
+    // Filled in at deploy time: the public address of the site and of the backend.
+    "APP_URL": "https://avenza.example.com",
+    "FLASK_API_URL": "https://api.example.com",
+    // Google sign-in (the secret is set with `npx wrangler secret put GOOGLE_CLIENT_SECRET`)
+    "GOOGLE_CLIENT_ID": ""
+  }
+}

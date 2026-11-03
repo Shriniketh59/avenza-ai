@@ -1,4 +1,4 @@
-"""ChromaDB persistence. Embeddings come from Ollama, so Chroma never downloads models."""
+"""ChromaDB persistence. Embeddings come from the Gemini API (llm.embed), so Chroma never downloads models."""
 import re
 
 import chromadb

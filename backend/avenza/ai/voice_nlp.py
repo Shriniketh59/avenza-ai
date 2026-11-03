@@ -18,7 +18,7 @@ _COMMANDS: list[tuple[re.Pattern, str]] = [
     (re.compile(r"^(stop|cancel|be quiet|stop talking|shut up)\.?$", re.I), "stop"),
     (re.compile(r"^(exit|close|end|quit) (voice|voice mode|conversation)\.?$|^goodbye\.?$|^bye\.?$", re.I), "exit_voice"),
     (re.compile(r"^(turn|switch) (on|off) (the )?web search\.?$", re.I), "toggle_web"),
-    (re.compile(r"^(switch|change) to (fast|accurate) mode\.?$", re.I), "set_mode"),
+    (re.compile(r"^(switch|change) to (?:avenza )?(flash|plus|fast|accurate)(?: mode| model)?\.?$", re.I), "set_mode"),
 ]
 _SEARCH = re.compile(r"^(please )?(search( the web| online| google)? for|look up|google) (?P<q>.+?)\.?$", re.I)
 
@@ -51,7 +51,8 @@ def detect_command(text: str) -> dict | None:
             if name == "toggle_web":
                 return {"name": name, "value": m.group(2).lower() == "on"}
             if name == "set_mode":
-                return {"name": name, "value": m.group(2).lower()}
+                value = m.group(2).lower()
+                return {"name": name, "value": {"fast": "flash", "accurate": "plus"}.get(value, value)}
             return {"name": name}
     m = _SEARCH.match(t)
     if m:
@@ -78,10 +79,16 @@ def _scale(s: str | None) -> str:
     return {"bn": "billion", "billion": "billion", "m": "million", "million": "million", "k": "thousand"}.get((s or "").lower(), "")
 
 
-def speakable(markdown: str) -> str:
-    """Turn a Markdown reply into text that sounds natural when read aloud."""
+def speakable(markdown: str, language: str | None = None) -> str:
+    """Turn a Markdown reply into text that sounds natural when read aloud. The English wording of symbols
+    ("percent", "rupees") is only added to English text: another language's voice reads the symbols itself."""
     t = re.sub(r"```.*?```", " (code shown on screen) ", markdown, flags=re.S)
     t = re.sub(r"`([^`]+)`", r"\1", t)
+    t = re.sub(r"\\[()\[\]]|\${2}", " ", t)  # LaTeX math delimiters (the voice prompt asks for words, this is a backstop)
+    t = re.sub(r"\\(?:frac|dfrac)\{([^{}]*)\}\{([^{}]*)\}", r"\1 over \2", t)
+    t = re.sub(r"\\sqrt\{([^{}]*)\}", r"the square root of \1", t)
+    t = re.sub(r"\\(times|cdot)", " times ", t)
+    t = re.sub(r"\\([a-zA-Z]+)", r"\1", t).replace("{,}", ",").replace("{", "").replace("}", "")
     t = re.sub(r"!\[[^\]]*\]\([^)]*\)", "", t)
     t = re.sub(r"\[([^\]]+)\]\((https?://[^)]+)\)", r"\1", t)
     t = re.sub(r"https?://\S+", "", t)
@@ -92,7 +99,8 @@ def speakable(markdown: str) -> str:
     t = re.sub(r"^\s*[-*+]\s+", "", t, flags=re.M)
     t = re.sub(r"^\s*\d+\.\s+", "", t, flags=re.M)
     t = re.sub(r"[*_~>#]+", "", t)
-    for pattern, repl in _UNITS:
+    english = (language or "en").split("-")[0] == "en" and not re.search(r"[^\x00-\x7f₹€£]", t)
+    for pattern, repl in _UNITS if english else ():
         t = pattern.sub(repl, t)
     t = re.sub(r"\s*\n\s*", ". ", t)
     t = re.sub(r"\.\s*\.", ".", t)

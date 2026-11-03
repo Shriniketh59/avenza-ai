@@ -2,7 +2,7 @@ import { cookies } from "next/headers";
 import { createRemoteJWKSet, jwtVerify } from "jose";
 import { createSession } from "@/lib/auth";
 import { toUser, type BackendAuthResponse } from "@/lib/backend-user";
-import { env, isBackendConfigured, isGoogleConfigured } from "@/lib/env";
+import { env, isBackendConfigured, isGoogleConfigured, publicOrigin } from "@/lib/env";
 import { flaskJson } from "@/lib/flask";
 
 const OAUTH_STATE_COOKIE = "avz_oauth_state";
@@ -18,13 +18,14 @@ interface GoogleIdClaims {
 
 export async function GET(request: Request) {
   const url = new URL(request.url);
-  const fail = (code: string) => Response.redirect(`${url.origin}/login?error=${code}`, 302);
+  const origin = publicOrigin(request);
+  const fail = (code: string) => Response.redirect(`${origin}/login?error=${code}`, 302);
   if (!isGoogleConfigured()) return fail("google_not_configured");
 
   const store = await cookies();
   const raw = store.get(OAUTH_STATE_COOKIE)?.value;
   store.delete({ name: OAUTH_STATE_COOKIE, path: "/api/auth/google" });
-  const saved = raw ? (JSON.parse(raw) as { state: string; verifier: string; next: string }) : null;
+  const saved = raw ? (JSON.parse(raw) as { state: string; verifier: string; redirectUri?: string; next: string }) : null;
 
   const code = url.searchParams.get("code");
   if (url.searchParams.get("error")) return fail("google_cancelled");
@@ -38,7 +39,8 @@ export async function GET(request: Request) {
         code,
         client_id: env.googleClientId!,
         client_secret: env.googleClientSecret!,
-        redirect_uri: `${env.appUrl}/api/auth/google/callback`,
+        // Must match the address sent when sign-in started.
+        redirect_uri: saved.redirectUri ?? `${origin}/api/auth/google/callback`,
         grant_type: "authorization_code",
         code_verifier: saved.verifier,
       }),
@@ -73,7 +75,7 @@ export async function GET(request: Request) {
     }
 
     await createSession(user, { remember: true, backendToken });
-    return Response.redirect(`${url.origin}${saved.next}`, 302);
+    return Response.redirect(`${origin}${saved.next}`, 302);
   } catch {
     return fail("google_failed");
   }

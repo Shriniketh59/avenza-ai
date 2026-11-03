@@ -10,7 +10,7 @@ const STARS = [
 /** Always-dark auth shell: starfield, glowing horizon, centred glass card. */
 export default function AuthLayout({ children }: LayoutProps<"/">) {
   return (
-    <div className="dark relative flex min-h-full flex-col overflow-hidden bg-[#03071a] text-[#eef2ff]">
+    <div className="dark relative flex min-h-full flex-col overflow-hidden bg-[#03071a] pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] text-[#eef2ff]">
       {STARS.map(([x, y, d]) => (
         <span key={`${x}-${y}`} aria-hidden className="avz-star" style={{ left: `${x}%`, top: `${y}%`, animationDelay: `${d}s` }} />
       ))}

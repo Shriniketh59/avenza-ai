@@ -2,6 +2,7 @@
 
 import { Mic, MicOff, X } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { MODELS } from "@/config/features";
 import { useConversations } from "@/hooks/conversation-store";
 import { usePreferences } from "@/hooks/use-preferences";
 import { MicrophoneError, useRecorder } from "@/hooks/use-recorder";
@@ -10,10 +11,11 @@ import { ApiError } from "@/lib/api-error";
 import { cn } from "@/lib/utils";
 import { takeSentences, voiceApi, type VoiceCommand } from "@/lib/voice-api";
 import { VoiceGlow, type VoicePhase } from "./voice-glow";
+import { unlockAudio } from "@/lib/audio-unlock";
 
 const STATUS: Record<VoicePhase, string> = {
   starting: "Starting",
-  listening: "Listening",
+  listening: "Listening · tap when done",
   transcribing: "Understanding",
   thinking: "Searching your sources",
   speaking: "Speaking · tap to interrupt",
@@ -56,9 +58,11 @@ interface Turn {
 export function VoiceMode({ onClose }: { onClose: () => void }) {
   const store = useConversations();
   const [prefs, updatePrefs] = usePreferences();
-  const { record, cancel: cancelRecording, level } = useRecorder();
+  const { record, stop: finishRecording, cancel: cancelRecording, level } = useRecorder();
   const [phase, setPhase] = useState<VoicePhase>("starting");
   const [heard, setHeard] = useState("");
+  // The language last heard: the reply is spoken by a voice of that language (unless Settings fixes one).
+  const [heardLanguage, setHeardLanguage] = useState<string | undefined>();
   const [error, setError] = useState<string | null>(null);
 
   const active = useRef(true);
@@ -71,9 +75,14 @@ export function VoiceMode({ onClose }: { onClose: () => void }) {
     prefsRef.current = prefs;
   });
 
+  const lastReply = store.active?.messages.at(-1);
+  const replyLanguage = lastReply?.role === "assistant" ? lastReply.language : undefined;
   const player = useSpeechPlayer({
     voice: prefs.ttsVoice,
     speed: prefs.ttsSpeed,
+    voices: prefs.ttsVoices,
+    // The reply's own language (a translation is read by a voice of its language), else Settings, else what was heard.
+    language: replyLanguage ?? (prefs.replyLanguage !== "auto" ? prefs.replyLanguage : heardLanguage),
     onIdle: () => {
       // Resume listening once the answer has been fully spoken.
       if (active.current && (!turn.current || turn.current.done)) listenRef.current();
@@ -109,7 +118,7 @@ export function VoiceMode({ onClose }: { onClose: () => void }) {
           return say(`Web search is now ${command.value ? "on" : "off"}.`);
         case "set_mode":
           updatePrefs({ mode: command.value });
-          return say(`Switched to ${command.value} mode.`);
+          return say(`Switched to ${MODELS.find((m) => m.id === command.value)?.name ?? command.value}.`);
         case "web_search":
           updatePrefs({ webSearch: true });
           return ask(text);
@@ -123,14 +132,21 @@ export function VoiceMode({ onClose }: { onClose: () => void }) {
     setPhase("listening");
     setError(null);
     try {
-      const blob = await record({ autoStop: true });
+      // 1.4 s of quiet ends a turn: short enough to feel quick, long enough for a pause mid-sentence.
+      const blob = await record({ autoStop: true, silenceMs: 1400 });
       if (!active.current) return;
-      if (!blob) return setPhase("paused");
+      if (!blob) {
+        // Nothing usable came from the microphone: say so, instead of silently pausing.
+        setPhase("error");
+        setError("I didn't hear anything. Check the microphone isn't muted, then tap to try again.");
+        return;
+      }
       setPhase("transcribing");
-      const { text, command } = await voiceApi.transcribe(blob, prefsRef.current.speechLanguage);
+      const { text, command, language } = await voiceApi.transcribe(blob, prefsRef.current.speechLanguage);
       if (!active.current) return;
       if (!text) return void listenRef.current();
       setHeard(text);
+      setHeardLanguage(language ?? undefined);
       if (command) runCommand(command, text);
       else ask(text);
     } catch (e) {
@@ -194,8 +210,7 @@ export function VoiceMode({ onClose }: { onClose: () => void }) {
     } else if (shownPhase === "paused" || shownPhase === "error") {
       listenRef.current();
     } else if (shownPhase === "listening") {
-      cancelRecording();
-      setPhase("paused");
+      finishRecording(); // "I'm done": send what was said now, without waiting for silence
     }
   };
 
@@ -225,7 +240,10 @@ export function VoiceMode({ onClose }: { onClose: () => void }) {
       {/* Whole stage is a tap target: interrupts while AVENZA talks, resumes when paused. */}
       <button
         type="button"
-        onClick={onOrb}
+        onClick={() => {
+          unlockAudio();
+          onOrb();
+        }}
         aria-label={STATUS[shownPhase]}
         className="relative flex min-h-0 flex-1 flex-col items-center px-6 text-center focus-visible:outline-none"
       >
@@ -261,7 +279,13 @@ export function VoiceMode({ onClose }: { onClose: () => void }) {
       <div className="relative flex items-center justify-center gap-4 pb-6 pt-4">
         <button
           type="button"
-          onClick={() => (listening ? (cancelRecording(), setPhase("paused")) : listenRef.current())}
+          onClick={() => {
+            unlockAudio();
+            if (listening) {
+              cancelRecording();
+              setPhase("paused");
+            } else listenRef.current();
+          }}
           aria-label={listening ? "Pause microphone" : "Resume microphone"}
           className={cn(
             "flex h-14 items-center gap-2 rounded-full px-6 text-sm font-medium backdrop-blur-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70",

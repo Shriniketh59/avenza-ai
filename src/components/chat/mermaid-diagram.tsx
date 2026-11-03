@@ -1,7 +1,7 @@
 "use client";
 
 import { Check, Code2, Copy, Download, Workflow } from "lucide-react";
-import { useEffect, useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 
 type MermaidApi = (typeof import("mermaid"))["default"];
@@ -17,6 +17,8 @@ function loadMermaid(dark: boolean): Promise<MermaidApi> {
       theme: dark ? "dark" : "default",
       fontFamily: "inherit",
       flowchart: { htmlLabels: false, curve: "basis" },
+      // Dark mode: arrow labels ("Yes", "Valid") on a dark chip, not a light-grey box with pale text.
+      ...(dark ? { themeVariables: { edgeLabelBackground: "#1e2a4a", tertiaryColor: "#1e2a4a" } } : {}),
     });
     return mermaid;
   });
@@ -28,10 +30,19 @@ const isDark = () => {
   return cls.contains("dark") || (!cls.contains("light") && matchMedia("(prefers-color-scheme: dark)").matches);
 };
 
+// Redraw at most this often while the code is still being written.
+const REDRAW_MS = 400;
+
+/** The code as written, then without its last (possibly half-written) line: the first that parses is drawn. */
+function candidates(code: string): string[] {
+  const lines = code.trimEnd().split("\n");
+  return lines.length > 2 ? [code, lines.slice(0, -1).join("\n")] : [code];
+}
+
 /**
- * Renders a ```mermaid block as a diagram. While the answer is still streaming the code is
- * usually incomplete, so rendering waits until it has stopped changing; if it never parses,
- * the code is shown instead.
+ * Renders a ```mermaid block as a diagram, live: while the answer is still being written it is redrawn every
+ * REDRAW_MS from the lines finished so far, so the diagram grows step by step. The last good drawing always
+ * stays on screen (never blanked while the next one renders); if nothing has parsed yet, the code is shown.
  */
 export function MermaidDiagram({ code }: { code: string }) {
   const id = useId().replace(/[^a-zA-Z0-9]/g, "");
@@ -40,25 +51,51 @@ export function MermaidDiagram({ code }: { code: string }) {
   const [showCode, setShowCode] = useState(false);
   const [copied, setCopied] = useState(false);
 
+  const latest = useRef(code);
+  const drawn = useRef("");
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const busy = useRef(false);
+  const alive = useRef(true);
+
   useEffect(() => {
-    let cancelled = false;
-    const timer = setTimeout(async () => {
+    alive.current = true;
+    return () => {
+      alive.current = false;
+      if (timer.current) clearTimeout(timer.current);
+      timer.current = null; // React may mount again (Strict Mode): it must be able to schedule a new draw
+      busy.current = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    latest.current = code;
+    // Throttle, not debounce: a stream changes the code many times a second and would never let a debounce fire.
+    const draw = async () => {
+      timer.current = null;
+      if (busy.current) return void (timer.current = setTimeout(draw, REDRAW_MS)); // mermaid renders one at a time
+      const source = latest.current;
+      if (source === drawn.current) return;
+      busy.current = true;
       try {
         const mermaid = await loadMermaid(isDark());
-        await mermaid.parse(code);
-        const { svg } = await mermaid.render(`mmd${id}${Date.now()}`, code);
-        if (!cancelled) {
+        for (const attempt of candidates(source)) {
+          if (!(await mermaid.parse(attempt, { suppressErrors: true }))) continue;
+          const { svg } = await mermaid.render(`mmd${id}${Date.now()}`, attempt);
+          if (!alive.current) return;
           setSvg(svg);
           setFailed(false);
+          drawn.current = source;
+          return;
         }
+        if (alive.current) setFailed(true);
       } catch {
-        if (!cancelled) setFailed(true);
+        if (alive.current) setFailed(true);
+      } finally {
+        busy.current = false;
+        if (alive.current && latest.current !== drawn.current && !timer.current) timer.current = setTimeout(draw, REDRAW_MS);
       }
-    }, 450);
-    return () => {
-      cancelled = true;
-      clearTimeout(timer);
     };
+    timer.current ??= setTimeout(draw, drawn.current ? REDRAW_MS : 150);
   }, [code, id]);
 
   const copy = async () => {
@@ -77,7 +114,8 @@ export function MermaidDiagram({ code }: { code: string }) {
 
   const button = "inline-flex items-center gap-1.5 rounded px-1.5 py-0.5 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
   return (
-    <div className="overflow-hidden rounded-xl border border-border bg-surface-2">
+    // data-diagram: kept out of the fade-in that new blocks get while an answer is written (it redraws in place).
+    <div data-diagram className="overflow-hidden rounded-xl border border-border bg-surface-2">
       <div className="flex items-center gap-3 border-b border-border px-3.5 py-1.5 text-xs text-muted">
         <span className="mr-auto inline-flex items-center gap-1.5">
           <Workflow className="size-3.5" aria-hidden /> Flow diagram
@@ -101,7 +139,7 @@ export function MermaidDiagram({ code }: { code: string }) {
       ) : (
         <div>
           {!svg && !showCode && (
-            <p className="px-4 pt-3 text-xs text-muted">{failed ? "Diagram is still being written or has a syntax error; showing its code." : "Drawing diagram…"}</p>
+            <p className="px-4 pt-3 text-xs text-muted">{failed ? "Showing the code until the diagram can be drawn." : "Drawing diagram…"}</p>
           )}
           <pre className="overflow-x-auto p-4 font-mono text-[0.82rem] leading-relaxed">{code}</pre>
         </div>

@@ -29,11 +29,16 @@ def transcribe():
 @require_auth
 def speak():
     data = request.get_json(silent=True) or {}
-    text = voice_nlp.speakable(str(data.get("text", "")))[:1500]
+    language = str(data.get("language") or "") or None
+    text = voice_nlp.speakable(str(data.get("text", "")), language)[:1500]
     if len(text) < 2:
         return jsonify(error="Nothing to say."), 400
+    by_language = data.get("voices") if isinstance(data.get("voices"), dict) else None
     try:
-        wav = speech.synthesize(text, data.get("voice"), float(data.get("speed", 1.0)))
+        wav = speech.synthesize(text, data.get("voice"), float(data.get("speed", 1.0)), language, by_language)
+    except speech.NoVoice as exc:
+        # The app then reads it with the device's own voice for that language.
+        return jsonify(error=str(exc), code="NO_VOICE", language=exc.family), 422
     except speech.SpeechError as exc:
         return jsonify(error=str(exc)), 503
     return Response(wav, mimetype="audio/wav", headers={"Cache-Control": "no-store"})
@@ -43,3 +48,32 @@ def speak():
 @require_auth
 def voices():
     return jsonify(voices=speech.available_voices(), default=current_app.config["DEFAULT_VOICE"])
+
+
+@bp.get("/catalog")
+@require_auth
+def catalog():
+    try:
+        return jsonify(voices=speech.catalog(), default=current_app.config["DEFAULT_VOICE"])
+    except speech.SpeechError as exc:
+        return jsonify(error=str(exc)), 503
+
+
+@bp.post("/voices/<voice_id>")
+@require_auth
+def install(voice_id: str):
+    try:
+        speech.install_voice(voice_id)
+    except speech.SpeechError as exc:
+        return jsonify(error=str(exc)), 400
+    return jsonify(ok=True), 202
+
+
+@bp.delete("/voices/<voice_id>")
+@require_auth
+def remove(voice_id: str):
+    try:
+        speech.remove_voice(voice_id)
+    except speech.SpeechError as exc:
+        return jsonify(error=str(exc)), 400
+    return jsonify(ok=True)

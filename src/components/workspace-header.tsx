@@ -12,7 +12,7 @@ const STATUS: Record<BackendStatus, { label: string; dot: string }> = {
   offline: { label: "Model offline", dot: "bg-danger" },
   not_configured: { label: "Backend not connected", dot: "bg-amber-400" },
   preview: { label: "Preview mode · model not connected", dot: "bg-amber-400" },
-  model_offline: { label: "Search index offline · run ollama serve", dot: "bg-danger" },
+  model_offline: { label: "Search offline · add GEMINI_API_KEY", dot: "bg-danger" },
   no_credit: { label: "API balance is empty · top up to chat", dot: "bg-amber-400" },
   model_missing: { label: "API key missing · add it to .env.local", dot: "bg-amber-400" },
 };

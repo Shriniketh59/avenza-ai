@@ -21,6 +21,7 @@ class Job:
     filename: str
     chunks: list[str]
     pages: list[int | None] | None = None  # page or slide each chunk starts on
+    offset: int = 0  # index of the first chunk, when appending to a document (camera scans add page by page)
 
 
 _jobs: "queue.Queue[Job]" = queue.Queue()
@@ -55,6 +56,7 @@ def _index(job: Job, chat_active: threading.Event):
     from ..db import get_db
 
     total = len(job.chunks)
+    done = job.offset + total
     for start in range(0, total, BATCH):
         # Pause while a chat answer is generating so the reply is not slowed down.
         while chat_active.is_set():
@@ -67,19 +69,24 @@ def _index(job: Job, chat_active: threading.Event):
             vectorstore.add(
                 vectorstore.DOCS,
                 job.user_id,
-                ids=[f"{job.doc_id}:{start + i}" for i in range(len(batch))],
+                ids=[f"{job.doc_id}:{job.offset + start + i}" for i in range(len(batch))],
                 texts=batch,
                 metadatas=[_meta(job, start + i) for i in range(len(batch))],
             )
         except LLMUnavailable as exc:
-            _set(job.doc_id, status="error", error=str(exc))
+            # The text is already searchable by keyword (doc_chunks); only search-by-meaning is incomplete.
+            # Keep the document usable instead of marking it failed.
+            from flask import current_app
+
+            current_app.logger.warning("embedding stopped for %s at %d/%d: %s", job.doc_id, start, total, exc)
+            _set(job.doc_id, status="ready", indexed=done)
             return
-        _set(job.doc_id, indexed=min(start + BATCH, total))
-    _set(job.doc_id, status="ready", indexed=total)
+        _set(job.doc_id, indexed=job.offset + min(start + BATCH, total))
+    _set(job.doc_id, status="ready", indexed=done)
 
 
 def _meta(job: Job, i: int) -> dict:
-    meta = {"document_id": job.doc_id, "filename": job.filename, "chunk": i}
+    meta = {"document_id": job.doc_id, "filename": job.filename, "chunk": job.offset + i}
     if job.pages and job.pages[i] is not None:
         meta["page"] = job.pages[i]  # Chroma metadata cannot hold None
     return meta

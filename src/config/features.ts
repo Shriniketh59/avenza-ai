@@ -8,6 +8,7 @@ import {
   Database,
   FileSearch,
   FileText,
+  Gem,
   Files,
   ImageIcon,
   Lightbulb,
@@ -15,8 +16,16 @@ import {
   Sigma,
   Sparkles,
   Workflow,
+  Zap,
   Wrench,
 } from "lucide-react";
+
+/** AVENZA's models. Usage weight matches the backend (AVENZA_MODELS in config.py). */
+export const MODELS = [
+  { id: "flash", name: "Avenza Flash", hint: "Fast generation · simpler tasks", icon: Zap },
+  { id: "plus", name: "Avenza Plus", hint: "Builds complex tasks · efficient", icon: Gem },
+] as const satisfies readonly { id: string; name: string; hint: string; icon: LucideIcon }[];
+export type ModelId = (typeof MODELS)[number]["id"];
 
 export type FeatureStatus = "available" | "coming_soon";
 

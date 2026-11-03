@@ -12,10 +12,12 @@ def create_app(config: type = Config) -> Flask:
 
     init_db(app)
 
-    from . import auth, chat, documents, memory, users, voice
+    from . import auth, chat, documents, extensions, memory, scans, usage, users, voice
     from .ai import llm
 
-    for module in (auth, users, chat, documents, memory, voice):
+    from .ai import docgen, imagegen
+
+    for module in (auth, users, chat, documents, extensions, memory, scans, usage, voice, imagegen, docgen):
         app.register_blueprint(module.bp)
 
     from .ai import news
@@ -25,6 +27,10 @@ def create_app(config: type = Config) -> Flask:
     from .ai import speech
 
     speech.warm_up(app)
+
+    from .ai import websearch
+
+    websearch.warm_up(app)
 
     @app.get("/health")
     def health():

@@ -1,16 +1,13 @@
 "use client";
 
-import { Check, ChevronDown, Gauge, Zap } from "lucide-react";
-import { useCallback, useRef, useState } from "react";
-import { AGENTS } from "@/config/features";
+import { Check, ChevronDown, CircleSlash, Sparkles } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { AGENTS, MODELS } from "@/config/features";
 import { useDismiss } from "@/hooks/use-dismiss";
 import { usePreferences } from "@/hooks/use-preferences";
+import { isPreviewMode, skillsApi } from "@/lib/api-client";
+import type { Skill } from "@/types/extensions";
 import { cn } from "@/lib/utils";
-
-const MODES = [
-  { id: "fast", name: "Fast", hint: "Instant answers · lightweight model", icon: Zap },
-  { id: "accurate", name: "Accurate", hint: "More reasoning · larger model", icon: Gauge },
-] as const;
 
 function Option({
   selected,
@@ -46,8 +43,8 @@ function Option({
 }
 
 /**
- * Agent and speed picker. Agents are specialist prompts and search rules on the backend;
- * speed picks the model size (Code, Debugging, Math and Reasoning always use the larger one).
+ * Agent and model picker. Agents are specialist prompts and search rules on the backend;
+ * the model is Avenza Flash (fast, simpler tasks) or Avenza Plus (complex tasks), and usage is charged per model.
  */
 export function AgentSelector() {
   const [open, setOpen] = useState(false);
@@ -55,8 +52,19 @@ export function AgentSelector() {
   const close = useCallback(() => setOpen(false), []);
   useDismiss(ref, open, close);
   const [prefs, update] = usePreferences();
-  const mode = MODES.find((m) => m.id === prefs.mode) ?? MODES[0];
+  const mode = MODELS.find((m) => m.id === prefs.mode) ?? MODELS[0];
   const agent = AGENTS.find((a) => a.id === prefs.agent) ?? AGENTS[0];
+  const [skills, setSkills] = useState<Skill[]>([]);
+  const skill = skills.find((s) => s.id === prefs.skill);
+
+  // The user's skills, refreshed each time the menu opens (they are edited in Settings).
+  useEffect(() => {
+    if (!open || isPreviewMode()) return;
+    skillsApi
+      .list()
+      .then((r) => setSkills(r.skills.filter((s) => s.enabled || s.id === prefs.skill)))
+      .catch(() => {});
+  }, [open, prefs.skill]);
 
   return (
     <div ref={ref} className="relative">
@@ -70,7 +78,8 @@ export function AgentSelector() {
         <span className="leading-tight">
           <span className="block text-[1.05rem] font-semibold">AVENZA</span>
           <span className="flex items-center gap-1 text-xs text-muted">
-            {agent.name} · {mode.name} <ChevronDown className="size-3" aria-hidden />
+            {agent.name} · {mode.name}
+            {prefs.skill && ` · ${skill?.name ?? "Skill"}`} <ChevronDown className="size-3" aria-hidden />
           </span>
         </span>
       </button>
@@ -93,9 +102,9 @@ export function AgentSelector() {
             ))}
           </ul>
           <div className="my-1.5 h-px bg-border" />
-          <p className="px-2.5 pb-1 pt-1 text-[11px] font-semibold uppercase tracking-wider text-muted">Speed</p>
-          <ul role="listbox" aria-label="Speed">
-            {MODES.map((m) => (
+          <p className="px-2.5 pb-1 pt-1 text-[11px] font-semibold uppercase tracking-wider text-muted">Model</p>
+          <ul role="listbox" aria-label="Model">
+            {MODELS.map((m) => (
               <Option
                 key={m.id}
                 selected={m.id === mode.id}
@@ -109,6 +118,37 @@ export function AgentSelector() {
               />
             ))}
           </ul>
+          {skills.length > 0 && (
+            <>
+              <div className="my-1.5 h-px bg-border" />
+              <p className="px-2.5 pb-1 pt-1 text-[11px] font-semibold uppercase tracking-wider text-muted">Skill</p>
+              <ul role="listbox" aria-label="Skill">
+                <Option
+                  selected={!prefs.skill}
+                  onSelect={() => {
+                    update({ skill: "" });
+                    close();
+                  }}
+                  icon={CircleSlash}
+                  name="Automatic"
+                  hint="Uses a skill when its description fits the message, or when you name it"
+                />
+                {skills.map((s) => (
+                  <Option
+                    key={s.id}
+                    selected={s.id === prefs.skill}
+                    onSelect={() => {
+                      update({ skill: s.id });
+                      close();
+                    }}
+                    icon={Sparkles}
+                    name={s.name}
+                    hint={s.description || s.instructions.slice(0, 60)}
+                  />
+                ))}
+              </ul>
+            </>
+          )}
         </div>
       )}
     </div>

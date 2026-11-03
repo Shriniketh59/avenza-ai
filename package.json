@@ -9,9 +9,12 @@
     "lint": "eslint",
     "dev:web": "next dev",
     "dev:api": "backend/.venv/bin/python backend/run.py",
-    "setup:api": "python3 -m venv backend/.venv && backend/.venv/bin/pip install -r backend/requirements.txt",
+    "setup:api": "./start.sh --setup-only",
     "setup": "./start.sh --setup-only",
-    "start:all": "./start.sh"
+    "start:all": "./start.sh",
+    "cf:build": "opennextjs-cloudflare build",
+    "cf:preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
+    "cf:deploy": "opennextjs-cloudflare build && opennextjs-cloudflare deploy"
   },
   "dependencies": {
     "@radix-ui/react-slot": "^1.3.3",
@@ -19,28 +22,33 @@
     "clsx": "^2.1.1",
     "highlight.js": "^11.12.0",
     "jose": "^6.2.12",
+    "katex": "0.16.47",
     "lucide-react": "^1.51.0",
     "mermaid": "^11.17.2",
-    "next": "16.3.8",
+    "next": "16.4.4",
     "next-themes": "^0.4.6",
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "react-markdown": "^10.1.0",
     "rehype-highlight": "^7.0.2",
+    "rehype-katex": "7.0.1",
     "remark-gfm": "^4.0.1",
+    "remark-math": "6.0.0",
     "server-only": "^0.0.1",
     "tailwind-merge": "^3.7.0",
     "zod": "^4.6.5"
   },
   "devDependencies": {
+    "@opennextjs/cloudflare": "1.20.15",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "concurrently": "^9.2.4",
     "eslint": "^9",
-    "eslint-config-next": "16.3.8",
+    "eslint-config-next": "16.4.4",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "wrangler": "4.156.1"
   }
 }
